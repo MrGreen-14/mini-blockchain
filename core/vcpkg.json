@@ -1,0 +1,7 @@
+{
+  "name": "mini-blockchain-core",
+  "version": "0.1.0",
+  "dependencies": [
+    "openssl"
+  ]
+}

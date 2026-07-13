@@ -60,6 +60,7 @@ compile_commands.json
 
 # vcpkg
 vcpkg_installed/
+vcpkg/
 
 # debug information files
 *.dwo
@@ -102,3 +103,14 @@ dist/
 *.chain
 data/*.json
 !data/.gitkeep
+
+# Visual Studio local cache
+.vs/
+
+# CMake build output (poate fi in core/ sau oriunde altundeva ulterior)
+build/
+**/build/
+
+# vcpkg compiled packages (separat de folderul vcpkg/ deja ignorat)
+vcpkg_installed/
+**/vcpkg_installed/
