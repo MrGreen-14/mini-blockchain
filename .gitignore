@@ -67,3 +67,38 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Python (network/, api/)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Environment / secrets
+.env
+*.env.local
+
+# Editor / IDE
+.vscode/
+.idea/
+*.iml
+
+# OS-specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node (npm/build tools pentru UI)
+node_modules/
+package-lock.json
+dist/
+
+# Date proprii de test/persistenta (chain-ul salvat pe disk)
+*.chain
+data/*.json
+!data/.gitkeep
