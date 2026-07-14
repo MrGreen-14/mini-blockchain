@@ -4,7 +4,7 @@
 
 static int hash_meets_difficulty(const char* hash, int difficulty) {
 	for (int i = 0; i < difficulty; i++){
-		if (hash[i] == '0') {
+		if (hash[i] != '0') {
 			return 0;
 		}
 	}

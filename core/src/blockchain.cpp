@@ -38,7 +38,7 @@ void add_block(Blockchain* chain,const char*data) {
 	}
 	else {
 		prev_hash = chain->blocks[chain->count - 1].hash;
-		new_index = chain->blocks[chain->count - 1].index;
+		new_index = chain->blocks[chain->count - 1].index+1;
 	}
 	chain->blocks[chain->count] = create_block(new_index, prev_hash, data);
 	mine_block(&chain->blocks[chain->count], DIFFICULTY);
