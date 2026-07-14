@@ -1,4 +1,5 @@
 #include "blockchain.h"
+#include "mining.h"
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -40,6 +41,7 @@ void add_block(Blockchain* chain,const char*data) {
 		new_index = chain->blocks[chain->count - 1].index;
 	}
 	chain->blocks[chain->count] = create_block(new_index, prev_hash, data);
+	mine_block(&chain->blocks[chain->count], DIFFICULTY);
 	chain->count++;
 }
 
