@@ -12,7 +12,13 @@ add_executable(blockchain_core
     src/sha256.cpp
     include/block.h
     include/sha256.h
- "include/blockchain.h" "src/blockchain.cpp")
+    include/blockchain.h 
+    src/blockchain.cpp 
+    include/mining.h 
+    src/mining.cpp
+    src/mining.cpp
+    include/mining.h
+)
 
 target_include_directories(blockchain_core PRIVATE include)
 target_link_libraries(blockchain_core PRIVATE OpenSSL::Crypto)
