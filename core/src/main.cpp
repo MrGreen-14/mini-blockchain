@@ -1,18 +1,5 @@
-//#include <openssl/sha.h>
-//#include <cstdio>
-//
-//int main() {
-//    unsigned char hash[SHA256_DIGEST_LENGTH];
-//    const char* data = "test";
-//    SHA256((unsigned char*)data, 4, hash);
-//
-//    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++)
-//        printf("%02x", hash[i]);
-//    printf("\n");
-//    return 0;
-//}
-
 #include "block.h"
+#include "blockchain.h"
 #include <cstdio>
 #include <cstring>
 
@@ -37,19 +24,36 @@ void test_serialize_sensitivity() {
     printf("[%s] test_serialize_sensitivity\n", ok ? "PASS" : "FAIL");
 }
 
+void test_blockchain_valid() {
+    Blockchain chain = create_blockchain();
+    add_block(&chain, "primul bloc");
+    add_block(&chain, "al doilea bloc");
+    add_block(&chain, "al treilea bloc");
+
+    int valid = is_chain_valid(&chain);
+    printf("[%s] test_blockchain_valid\n", valid ? "PASS" : "FAIL");
+
+    free_blockchain(&chain);
+}
+
+void test_tampering_detected() {
+    Blockchain chain = create_blockchain();
+    add_block(&chain, "bloc original");
+    add_block(&chain, "bloc doi");
+    add_block(&chain, "bloc trei");
+
+    strncpy(chain.blocks[1].data, "date falsificate", MAX_DATA_SIZE - 1);
+
+    int valid = is_chain_valid(&chain);
+    printf("[%s] test_tampering_detected (asteptam lant INVALID)\n", !valid ? "PASS" : "FAIL");
+
+    free_blockchain(&chain);
+
+}
+
 int main() {
 
-    test_create_block();
-    test_serialize_sensitivity();
-
-    printf("\n=== Exemplu vizual ===\n");
-    Block genesis = create_block(0, "0000000000000000000000000000000000000000000000000000000000000",
-        "Genesis Block");
-    print_block(&genesis);
-
-    char buffer[512];
-    serialize_block(&genesis, buffer, sizeof(buffer));
-    printf("\nSerializare: %s\n", buffer);
+    test_tampering_detected();
 
     return 0;
 }

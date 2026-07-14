@@ -8,7 +8,11 @@ find_package(OpenSSL REQUIRED)
 
 add_executable(blockchain_core
     src/main.cpp
- "include/block.h" "include/block.cpp")
+    src/block.cpp
+    src/sha256.cpp
+    include/block.h
+    include/sha256.h
+ "include/blockchain.h" "src/blockchain.cpp")
 
 target_include_directories(blockchain_core PRIVATE include)
 target_link_libraries(blockchain_core PRIVATE OpenSSL::Crypto)

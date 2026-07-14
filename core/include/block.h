@@ -20,5 +20,5 @@ struct Block {
 Block create_block(uint32_t index, const char* prev_hash, const char* data);
 void print_block(const Block* block);
 void serialize_block(const Block* block, char* buffer, size_t buffer_size);
-
+void compute_hash(Block* block);
 #endif

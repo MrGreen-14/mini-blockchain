@@ -1,4 +1,5 @@
 #include "block.h"
+#include "sha256.h"
 #include <cstdio>
 #include <cstring>
 
@@ -16,9 +17,10 @@ Block create_block(uint32_t index, const char* prev_hash, const char* data) {
 	block.data[MAX_DATA_SIZE - 1] = '\0';
 
 	block.nonce = 0;
-	memset(block.hash, 0, HASH_SIZE);
+	compute_hash(&block);
 
 	return block;
+	//b1 1784010376
 }
 
 void print_block(const Block* block) {
@@ -35,4 +37,11 @@ void serialize_block(const Block* block, char* buffer, size_t buffer_size) {
 		block->index, (long)block->timestamp, 
 		block->prev_hash, block->data, 
 		block->nonce);
+}
+
+void compute_hash(Block*block) {
+	char serialized[512];
+	serialize_block(block, serialized, sizeof(serialized));
+
+	compute_sha256_hex((const unsigned char*)serialized, strlen(serialized), block->hash);
 }
