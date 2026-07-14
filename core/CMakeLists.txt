@@ -18,7 +18,7 @@ add_executable(blockchain_core
     src/mining.cpp
     src/mining.cpp
     include/mining.h
-)
+ "include/transaction.h" "src/transaction.cpp" "include/merkle.h" "src/merkle.cpp")
 
 target_include_directories(blockchain_core PRIVATE include)
 target_link_libraries(blockchain_core PRIVATE OpenSSL::Crypto)
