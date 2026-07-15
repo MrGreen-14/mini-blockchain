@@ -8,17 +8,18 @@ find_package(OpenSSL REQUIRED)
 
 add_executable(blockchain_core
     src/main.cpp
-    src/block.cpp
-    src/sha256.cpp
     include/block.h
+    src/block.cpp
     include/sha256.h
+    src/sha256.cpp
     include/blockchain.h 
     src/blockchain.cpp 
     include/mining.h 
     src/mining.cpp
-    src/mining.cpp
-    include/mining.h
- "include/transaction.h" "src/transaction.cpp" "include/merkle.h" "src/merkle.cpp")
+    include/transaction.h
+    src/transaction.cpp
+    include/merkle.h
+    src/merkle.cpp)
 
 target_include_directories(blockchain_core PRIVATE include)
 target_link_libraries(blockchain_core PRIVATE OpenSSL::Crypto)

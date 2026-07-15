@@ -12,7 +12,7 @@ struct Blockchain{
 
 Blockchain create_blockchain();
 void free_blockchain(Blockchain* chain);
-void add_block(Blockchain* chain, const char* data);
+Block* begin_block(Blockchain* chain);
+void commit_block(Blockchain* chain, int difficulty);
 int is_chain_valid(const Blockchain* chain);
-
 #endif // !BLOCKCHAIN_H

@@ -1,5 +1,6 @@
 #include "blockchain.h"
 #include "mining.h"
+#include "merkle.h"
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -16,17 +17,21 @@ Blockchain create_blockchain() {
 }
 
 void free_blockchain(Blockchain* chain) {
+	for (size_t i = 0; i < chain->count; i++){
+		free_block(&chain->blocks[i]);
+	}
 	free(chain->blocks);
 	chain->blocks = NULL;
-	chain->blocks = 0;
 	chain->count = 0;
+	chain->capacity = 0;
 }
 
-void add_block(Blockchain* chain,const char*data) {
+Block* begin_block(Blockchain* chain) {
 	if (chain->count == chain->capacity) {
 		chain->capacity *= 2;
-		chain->blocks = (Block*)realloc(chain->blocks, chain->capacity * sizeof(Block));
-		if (!chain->blocks)exit(1);
+		Block* new_array = (Block*)realloc(chain->blocks, chain->capacity * sizeof(Block));
+		if (!new_array)exit(1);
+		chain->blocks = new_array;
 	}
 
 	const char* prev_hash;
@@ -38,30 +43,48 @@ void add_block(Blockchain* chain,const char*data) {
 	}
 	else {
 		prev_hash = chain->blocks[chain->count - 1].hash;
-		new_index = chain->blocks[chain->count - 1].index+1;
+		new_index = chain->blocks[chain->count - 1].index + 1;
 	}
-	chain->blocks[chain->count] = create_block(new_index, prev_hash, data);
-	mine_block(&chain->blocks[chain->count], DIFFICULTY);
+
+	chain->blocks[chain->count] = create_block(new_index, prev_hash);
+	return &chain->blocks[chain->count];
+}
+
+void commit_block(Blockchain* chain, int difficulty) {
+	Block* block = &chain->blocks[chain->count];
+	finalize_merkle_root(block);
+	mine_block(block, difficulty);
 	chain->count++;
 }
 
-int is_chain_valid(const Blockchain* chain) {
-	for (int i = 0; i < chain->count; i++){
-		Block current = chain->blocks[i];
-		char recalculated_hash[HASH_SIZE];
-		strncpy(recalculated_hash, current.hash, HASH_SIZE);
-		recalculated_hash[HASH_SIZE - 1] = '\0';
 
-		compute_hash(&current);
-		if (strcmp(current.hash, recalculated_hash) != 0) {
-			printf("Bloc #%u: integritate invalida (hash nu corespunde continutului)\n", chain->blocks[i].index);
+int is_chain_valid(const Blockchain* chain) {
+	for (size_t i = 0; i < chain->count; i++){
+		const Block* block = &chain->blocks[i]; //shallow copy
+
+		char recalculated_merkle[65];
+		compute_merkle_root(block->transactions, block->transaction_count, recalculated_merkle);
+
+		if (strcmp(recalculated_merkle, block->merkle_root) != 0) {
+			printf("Bloc #%u: merkle root invalid (tranzactiile au fost modificate)\n", block->index);
+			return 0;
+		}
+
+		Block temp = *block;
+		char stored_hash[65];
+		strncpy(stored_hash, temp.hash, 65);
+		stored_hash[64] = '\0';
+
+		compute_hash(&temp);
+		if (strcmp(temp.hash, stored_hash) != 0) {
+			printf("Bloc #%u: integritate invalida (hash nu corespunde continutului)\n", block->index);
 			return 0;
 		}
 
 		if (i > 0) {
 			const char* expected_prev_hash = chain->blocks[i - 1].hash;
-			if (strcmp(chain->blocks[i].prev_hash, expected_prev_hash) != 0) {
-				printf("Bloc #%u: prev_hash nu corespunde cu hash-ul blocului anterior\n", chain->blocks[i].index);
+			if (strcmp(block->prev_hash, expected_prev_hash) != 0) {
+				printf("Bloc #%u: prev_hash nu corespunde cu hash-ul blocului anterior\n", block->index);
 				return 0;
 			}
 		}
