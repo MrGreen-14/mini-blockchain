@@ -1,75 +1,119 @@
 #include "block.h"
 #include "blockchain.h"
 #include "mining.h"
+#include "merkle.h"
+#include "transaction.h"
 #include <cstdio>
 #include <cstring>
 
-void test_create_block() {
-    Block b = create_block(0, "0000000000000000000000000000000000000000000000000000000000000",
-        "Genesis Block");
-
-    int ok = (b.index == 0) && (strcmp(b.data, "Genesis Block") == 0) && (b.nonce == 0);
-    printf("[%s] test_create_block\n", ok ? "PASS" : "FAIL");
+static void make_tx(Transaction* tx, const char* sender, const char* receiver, uint64_t amount) {
+    strncpy(tx->sender, sender, ADDRESS_SIZE - 1);
+    tx->sender[ADDRESS_SIZE - 1] = '\0';
+    strncpy(tx->receiver, receiver, ADDRESS_SIZE - 1);
+    tx->receiver[ADDRESS_SIZE - 1] = '\0';
+    tx->amount = amount;
 }
 
-void test_serialize_sensitivity() {
-    Block b1 = create_block(1, "abc", "Hello");
-    Block b2 = create_block(1, "abc", "Hell0");
+void test_merkle_determinism() {
+    Transaction txs[2];
+    make_tx(&txs[0], "Alice", "Bob", 100);
+    make_tx(&txs[1], "Bob", "Carol", 50);
 
-    char buf1[512], buf2[512];
-    serialize_block(&b1, buf1, sizeof(buf1));
-    serialize_block(&b2, buf2, sizeof(buf2));
+    char root1[65], root2[65];
+    compute_merkle_root(txs, 2, root1);
+    compute_merkle_root(txs, 2, root2);
 
-   
-    int ok = (strcmp(buf1, buf2) != 0);
-    printf("[%s] test_serialize_sensitivity\n", ok ? "PASS" : "FAIL");
+    int ok = (strcmp(root1, root2) == 0);
+    printf("[%s] test_merkle_determinism\n", ok ? "PASS" : "FAIL");
 }
 
-void test_mining_produces_valid_hash() {
+void test_merkle_sensitivity() {
+    Transaction txs[2];
+    make_tx(&txs[0], "Alice", "Bob", 100);
+    make_tx(&txs[1], "Bob", "Carol", 50);
+
+    char root_before[65];
+    compute_merkle_root(txs, 2, root_before);
+
+    txs[1].amount = 51;
+
+    char root_after[65];
+    compute_merkle_root(txs, 2, root_after);
+
+    int ok = (strcmp(root_before, root_after) != 0);
+    printf("[%s] test_merkle_sensitivity (avalanche la nivel de Merkle root)\n", ok ? "PASS" : "FAIL");
+}
+
+void test_merkle_odd_count() {
+    Transaction txs[3];
+    make_tx(&txs[0], "A", "B", 1);
+    make_tx(&txs[1], "B", "C", 2);
+    make_tx(&txs[2], "C", "D", 3);
+
+    char root[65];
+    compute_merkle_root(txs, 3, root);
+
+    int ok = (strlen(root) == 64);
+    printf("[%s] test_merkle_odd_count (numar impar, nodul dublat, fara crash)\n", ok ? "PASS" : "FAIL");
+}
+
+void test_block_with_transactions() {
     Blockchain chain = create_blockchain();
-    add_block(&chain, "bloc de test pentru mining");
 
-    const char* hash = chain.blocks[chain.count - 1].hash;
-    int ok = 1;
-    for (int i = 0; i < DIFFICULTY; i++) {
-        if (hash[i] != '0') {
-            ok = 0;
-            break;
-        }
-    }
+    Block* b = begin_block(&chain);
+    add_transaction_to_block(b, "Alice", "Bob", 500);
+    add_transaction_to_block(b, "Bob", "Carol", 200);
+    commit_block(&chain, DIFFICULTY);
 
-    printf("[%s] test_mining_produces_valid_hash (hash-ul incepe cu %d zerouri)\n",
-        ok ? "PASS" : "FAIL", DIFFICULTY);
+    Block* committed = &chain.blocks[0];
+    int ok = (strlen(committed->merkle_root) == 64) && (committed->transaction_count == 2);
+    printf("[%s] test_block_with_transactions\n", ok ? "PASS" : "FAIL");
 
     free_blockchain(&chain);
 }
 
-void test_chain_still_valid_with_mining() {
+void test_chain_valid_with_transactions() {
     Blockchain chain = create_blockchain();
-    add_block(&chain, "primul bloc");
-    add_block(&chain, "al doilea bloc");
-    add_block(&chain, "al treilea bloc");
+
+    Block* b1 = begin_block(&chain);
+    add_transaction_to_block(b1, "Alice", "Bob", 500);
+    commit_block(&chain, DIFFICULTY);
+
+    Block* b2 = begin_block(&chain);
+    add_transaction_to_block(b2, "Bob", "Carol", 200);
+    add_transaction_to_block(b2, "Carol", "Dave", 100);
+    commit_block(&chain, DIFFICULTY);
 
     int valid = is_chain_valid(&chain);
-    printf("[%s] test_chain_still_valid_with_mining\n", valid ? "PASS" : "FAIL");
+    printf("[%s] test_chain_valid_with_transactions\n", valid ? "PASS" : "FAIL");
 
     free_blockchain(&chain);
 }
 
-void test_mining_difficulty_timing() {
-    Block block1 = create_block(0, "0000000000000000000000000000000000000000000000000000000000000", "test dificultate");
-    mine_block(&block1, 3);
+void test_transaction_tampering_detected() {
+    Blockchain chain = create_blockchain();
 
-    Block block2 = create_block(0, "0000000000000000000000000000000000000000000000000000000000000", "test dificultate");
-    mine_block(&block2, 5);
+    Block* b1 = begin_block(&chain);
+    add_transaction_to_block(b1, "Alice", "Bob", 500);
+    commit_block(&chain, DIFFICULTY);
 
-    printf("Comparatie: dificultate 3 vs dificultate 5 (vezi timpii si nonce-urile afisate mai sus)\n");
+    // Atac simulat: modificam suma DUPA commit, fara sa recalculam merkle root
+    chain.blocks[0].transactions[0].amount = 999999;
+
+    int valid = is_chain_valid(&chain);
+    printf("[%s] test_transaction_tampering_detected (lant INVALID)\n", !valid ? "PASS" : "FAIL");
+
+    free_blockchain(&chain);
 }
 
-int main() {
 
-    //test_mining_produces_valid_hash();
-    test_chain_still_valid_with_mining();
-    //test_mining_difficulty_timing();
+
+int main() {
+    //test_merkle_determinism();
+    //test_merkle_sensitivity();
+    //test_merkle_odd_count();
+    //test_block_with_transactions();
+    //test_chain_valid_with_transactions();
+    test_transaction_tampering_detected();
     return 0;
 }
