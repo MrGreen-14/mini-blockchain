@@ -19,7 +19,9 @@ add_executable(blockchain_core
     include/transaction.h
     src/transaction.cpp
     include/merkle.h
-    src/merkle.cpp)
+    src/merkle.cpp 
+    include/persistence.h
+    src/persistence.cpp)
 
 target_include_directories(blockchain_core PRIVATE include)
 target_link_libraries(blockchain_core PRIVATE OpenSSL::Crypto)

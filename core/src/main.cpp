@@ -3,7 +3,10 @@
 #include "mining.h"
 #include "merkle.h"
 #include "transaction.h"
+#include "persistence.h"
+#include "assert.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 static void make_tx(Transaction* tx, const char* sender, const char* receiver, uint64_t amount) {
@@ -106,14 +109,66 @@ void test_transaction_tampering_detected() {
     free_blockchain(&chain);
 }
 
+void test_save_load_roundtrip(void) {
+    Blockchain chain = create_blockchain();
 
+    Block* b1 = begin_block(&chain);
+    add_transaction_to_block(b1, "alice", "bob", 100);   // <- string-uri + amount direct, nu &tx1
+    commit_block(&chain, DIFFICULTY);
+
+    Block* b2 = begin_block(&chain);
+    add_transaction_to_block(b2, "bob", "carol", 40);    // <- la fel
+    commit_block(&chain, DIFFICULTY);
+
+    int saved = save_chain_to_file(&chain, "test_chain.dat");
+    assert(saved);
+
+    Blockchain* loaded = load_chain_from_file("test_chain.dat");
+    assert(loaded != NULL);
+    assert(loaded->count == chain.count);
+    assert(strcmp(loaded->blocks[1].hash, chain.blocks[1].hash) == 0);
+    assert(is_chain_valid(loaded));
+
+    free_blockchain(&chain);
+    free_blockchain(loaded);
+    printf("test_save_load_roundtrip: PASSED\n");
+}
+
+void test_load_corrupted_file() {
+    FILE* f = fopen("garbage.dat", "wb");
+    uint32_t junk = 0xDEADBEEF;
+    fwrite(&junk, sizeof(junk), 1, f);
+    fclose(f);
+
+    Blockchain* loaded = load_chain_from_file("garbage.dat");
+    assert(loaded == NULL);
+
+    remove("garbage.dat");
+    printf("test_load_corrupted_file: PASSED\n");
+}
+
+void test_load_truncated_file() {
+    Blockchain chain = create_blockchain();
+
+    Block* b = begin_block(&chain);
+    add_transaction_to_block(b, "x", "y", 1);
+    commit_block(&chain, DIFFICULTY);
+
+    uint8_t* buffer = NULL;
+    size_t length = serialize_chain(&chain, &buffer);
+    assert(length > 10);
+
+    Blockchain* loaded = deserialize_chain(buffer, length - 10);
+    assert(loaded == NULL);
+
+    free(buffer);
+    free_blockchain(&chain);
+    printf("test_load_truncated_file: PASSED\n");
+}
 
 int main() {
-    //test_merkle_determinism();
-    //test_merkle_sensitivity();
-    //test_merkle_odd_count();
-    //test_block_with_transactions();
-    //test_chain_valid_with_transactions();
-    test_transaction_tampering_detected();
+    //test_save_load_roundtrip();
+    //test_load_corrupted_file();
+    test_load_truncated_file();
     return 0;
 }
