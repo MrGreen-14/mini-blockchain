@@ -167,8 +167,8 @@ void test_load_truncated_file() {
 }
 
 int main() {
-    //test_save_load_roundtrip();
+    test_save_load_roundtrip();
     //test_load_corrupted_file();
-    test_load_truncated_file();
+    //test_load_truncated_file();
     return 0;
 }
