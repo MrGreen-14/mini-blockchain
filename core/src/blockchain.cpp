@@ -50,13 +50,16 @@ Block* begin_block(Blockchain* chain) {
 	return &chain->blocks[chain->count];
 }
 
-void commit_block(Blockchain* chain, int difficulty) {
+int commit_block(Blockchain* chain, int difficulty, volatile int* stop_flag) {
 	Block* block = &chain->blocks[chain->count];
 	finalize_merkle_root(block);
-	mine_block(block, difficulty);
-	chain->count++;
-}
 
+	int success = mine_block(block, difficulty, stop_flag);
+	if (success) {
+		chain->count++;
+	}
+	return success;
+}
 
 int is_chain_valid(const Blockchain* chain) {
 	for (size_t i = 0; i < chain->count; i++){
@@ -90,4 +93,17 @@ int is_chain_valid(const Blockchain* chain) {
 		}
 	}
 	return 1;
+}
+
+Blockchain* create_blockchain_heap() {
+	Blockchain* chain = (Blockchain*)malloc(sizeof(Blockchain));
+	if (!chain) return NULL;
+	*chain = create_blockchain();
+	return chain;
+}
+
+void destroy_blockchain(Blockchain* chain) {
+	if (!chain) return;
+	free_blockchain(chain);
+	free(chain);
 }

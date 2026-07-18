@@ -263,3 +263,7 @@ Blockchain* load_chain_from_file(const char* filepath) {
 	free(buffer);
 	return chain;
 }
+
+void free_serialized_buffer(uint8_t* buffer) {
+	free(buffer);
+}

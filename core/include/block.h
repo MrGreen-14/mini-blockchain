@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <ctime>
 #include "transaction.h"
+#include "export.h"
 
 #define HASH_SIZE 65
 
@@ -21,11 +22,15 @@ struct Block {
 };
 
 Block create_block(uint32_t index, const char* prev_hash);
-void add_transaction_to_block(Block* block, const char* sender, const char* receiver, uint64_t amount);
+BLOCKCHAIN_API void add_transaction_to_block(Block* block, const char* sender, const char* receiver, uint64_t amount);
 void finalize_merkle_root(Block* block);
 
 void free_block(Block* block);
 void print_block(const Block* block);
 void serialize_block(const Block* block, char* buffer, size_t buffer_size);
 void compute_hash(Block* block);
+
+
+BLOCKCHAIN_API void add_coinbase_transaction(Block* block, const char* miner_address, uint64_t reward);
+
 #endif

@@ -93,3 +93,14 @@ void compute_hash(Block*block) {
 
 	compute_sha256_hex((const unsigned char*)serialized, strlen(serialized), block->hash);
 }
+
+void add_coinbase_transaction(Block* block,const char* miner_address,uint64_t reward) {
+	if (block->transaction_count == block->transaction_capacity) {
+		block->transaction_capacity *= 2;
+		block->transactions = (Transaction*)realloc(block->transactions, block->transaction_capacity * sizeof(Transaction));
+	}
+
+	memmove(&block->transactions[1], &block->transactions[0], block->transaction_count * sizeof(Transaction));
+	block->transactions[0] = create_coinbase_transaction(miner_address, reward);
+	block->transaction_count++;
+}
