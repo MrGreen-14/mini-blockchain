@@ -66,7 +66,7 @@ void test_block_with_transactions() {
     Block* b = begin_block(&chain);
     add_transaction_to_block(b, "Alice", "Bob", 500);
     add_transaction_to_block(b, "Bob", "Carol", 200);
-    commit_block(&chain, DIFFICULTY);
+    commit_block(&chain, DIFFICULTY,NULL);
 
     Block* committed = &chain.blocks[0];
     int ok = (strlen(committed->merkle_root) == 64) && (committed->transaction_count == 2);
@@ -80,12 +80,12 @@ void test_chain_valid_with_transactions() {
 
     Block* b1 = begin_block(&chain);
     add_transaction_to_block(b1, "Alice", "Bob", 500);
-    commit_block(&chain, DIFFICULTY);
+    commit_block(&chain, DIFFICULTY, NULL);
 
     Block* b2 = begin_block(&chain);
     add_transaction_to_block(b2, "Bob", "Carol", 200);
     add_transaction_to_block(b2, "Carol", "Dave", 100);
-    commit_block(&chain, DIFFICULTY);
+    commit_block(&chain, DIFFICULTY, NULL);
 
     int valid = is_chain_valid(&chain);
     printf("[%s] test_chain_valid_with_transactions\n", valid ? "PASS" : "FAIL");
@@ -98,7 +98,7 @@ void test_transaction_tampering_detected() {
 
     Block* b1 = begin_block(&chain);
     add_transaction_to_block(b1, "Alice", "Bob", 500);
-    commit_block(&chain, DIFFICULTY);
+    commit_block(&chain, DIFFICULTY, NULL);
 
     // Atac simulat: modificam suma DUPA commit, fara sa recalculam merkle root
     chain.blocks[0].transactions[0].amount = 999999;
@@ -114,11 +114,11 @@ void test_save_load_roundtrip(void) {
 
     Block* b1 = begin_block(&chain);
     add_transaction_to_block(b1, "alice", "bob", 100);   // <- string-uri + amount direct, nu &tx1
-    commit_block(&chain, DIFFICULTY);
+    commit_block(&chain, DIFFICULTY, NULL);
 
     Block* b2 = begin_block(&chain);
     add_transaction_to_block(b2, "bob", "carol", 40);    // <- la fel
-    commit_block(&chain, DIFFICULTY);
+    commit_block(&chain, DIFFICULTY, NULL);
 
     int saved = save_chain_to_file(&chain, "test_chain.dat");
     assert(saved);
@@ -152,7 +152,7 @@ void test_load_truncated_file() {
 
     Block* b = begin_block(&chain);
     add_transaction_to_block(b, "x", "y", 1);
-    commit_block(&chain, DIFFICULTY);
+    commit_block(&chain, DIFFICULTY, NULL);
 
     uint8_t* buffer = NULL;
     size_t length = serialize_chain(&chain, &buffer);
@@ -166,9 +166,29 @@ void test_load_truncated_file() {
     printf("test_load_truncated_file: PASSED\n");
 }
 
+
 int main() {
     test_save_load_roundtrip();
     //test_load_corrupted_file();
     //test_load_truncated_file();
+
+
+    Blockchain chain = create_blockchain();
+    Block* block = begin_block(&chain);
+
+    add_coinbase_transaction(block, "MinerAddress1", 50);
+    add_transaction_to_block(block, "Alice", "Bob", 100);
+    add_transaction_to_block(block, "Bob", "Charlie", 40);
+
+    commit_block(&chain, DIFFICULTY, NULL);
+
+    assert(strcmp(chain.blocks[0].transactions[0].sender, "COINBASE") == 0);
+    assert(strcmp(chain.blocks[0].transactions[0].receiver, "MinerAddress1") == 0);
+    assert(chain.blocks[0].transactions[0].amount == 50);
+    assert(chain.blocks[0].transaction_count == 3);
+
+    printf("test_coinbase_transaction: PASSED\n");
+
+
     return 0;
 }
