@@ -14,4 +14,6 @@ struct Transaction {
 
 void serialize_transaction(const Transaction* tx, char* buffer, size_t buffer_size);
 
+Transaction create_coinbase_transaction(const char* receiver, uint64_t reward);
+
 #endif // !TRANSACTION_H
