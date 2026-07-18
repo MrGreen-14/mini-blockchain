@@ -9,10 +9,13 @@
 
 Blockchain create_blockchain() {
 	Blockchain chain;
+	chain.capacity = INITIAL_CAPACITY;
+
 	chain.blocks = (Block*)malloc(INITIAL_CAPACITY * sizeof(Block));
 	if (!chain.blocks) { exit(1); }
+
+	memset(chain.blocks, 0, chain.capacity * sizeof(Block));
 	chain.count = 0;
-	chain.capacity = INITIAL_CAPACITY;
 	return chain;
 }
 
@@ -33,6 +36,13 @@ Block* begin_block(Blockchain* chain) {
 		if (!new_array)exit(1);
 		chain->blocks = new_array;
 	}
+
+	// daca slotul a fost deja folosit intr-o incercare de minare anterioara,
+	// intrerupta inainte sa comita, elibereaza array-ul vechi de tranzactii
+	// inainte sa il suprascriem -- altfel pierdem pointer-ul si memoria ramane blocata
+	//if (chain->blocks[chain->count].transactions != NULL) {
+	//	free(chain->blocks[chain->count].transactions);
+	//}
 
 	const char* prev_hash;
 	uint32_t new_index;
@@ -106,4 +116,9 @@ void destroy_blockchain(Blockchain* chain) {
 	if (!chain) return;
 	free_blockchain(chain);
 	free(chain);
+}
+
+size_t get_chain_length(const Blockchain* chain) {
+	if (!chain) return 0;
+	return chain->count;
 }

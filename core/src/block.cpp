@@ -96,11 +96,17 @@ void compute_hash(Block*block) {
 
 void add_coinbase_transaction(Block* block,const char* miner_address,uint64_t reward) {
 	if (block->transaction_count == block->transaction_capacity) {
-		block->transaction_capacity *= 2;
-		block->transactions = (Transaction*)realloc(block->transactions, block->transaction_capacity * sizeof(Transaction));
+		size_t new_capacity = (block->transaction_capacity == 0) ? 4 : block->transaction_capacity *= 2;
+		Transaction* new_arr = (Transaction*)realloc(block->transactions, new_capacity * sizeof(Transaction));
+		if (new_arr == NULL) {
+			return;
+		}
+		block->transactions = new_arr;
+		block->transaction_capacity = new_capacity;
 	}
 
 	memmove(&block->transactions[1], &block->transactions[0], block->transaction_count * sizeof(Transaction));
+	
 	block->transactions[0] = create_coinbase_transaction(miner_address, reward);
 	block->transaction_count++;
 }
