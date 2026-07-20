@@ -40,9 +40,9 @@ Block* begin_block(Blockchain* chain) {
 	// daca slotul a fost deja folosit intr-o incercare de minare anterioara,
 	// intrerupta inainte sa comita, elibereaza array-ul vechi de tranzactii
 	// inainte sa il suprascriem -- altfel pierdem pointer-ul si memoria ramane blocata
-	//if (chain->blocks[chain->count].transactions != NULL) {
-	//	free(chain->blocks[chain->count].transactions);
-	//}
+	if (chain->blocks[chain->count].transactions != NULL) {
+		free(chain->blocks[chain->count].transactions);
+	}
 
 	const char* prev_hash;
 	uint32_t new_index;
