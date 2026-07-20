@@ -20,4 +20,8 @@ BLOCKCHAIN_API void destroy_blockchain(Blockchain* chain);
 BLOCKCHAIN_API Block* begin_block(Blockchain* chain);
 BLOCKCHAIN_API int commit_block(Blockchain* chain, int difficulty, volatile int* stop_flag);
 BLOCKCHAIN_API int is_chain_valid(const Blockchain* chain);
+
+BLOCKCHAIN_API size_t get_chain_length(const Blockchain* chain);
+
 #endif // !BLOCKCHAIN_H
+ 
