@@ -5,9 +5,12 @@ import time
 import sys
 import threading
 import base64
+from enum import Enum
 
 from protocol import receive_message,send_message
 from mempool import Mempool
+from consensus import ForkResolution, resolve_fork
+from chain_format import parse_chain,find_orphaned_transactions
 
 DIFFICULTY = 4
 BLOCK_REWARD = 50
@@ -52,6 +55,11 @@ lib.deserialize_chain.restype = ctypes.c_void_p
 lib.free_serialized_buffer.argtypes = [ctypes.c_void_p]
 lib.free_serialized_buffer.restype = None
 
+
+class NodeState(Enum):
+    SYNCING = "SYNCING"
+    SYNCED = "SYNCED"
+
 class Node:
     def __init__(self,host,port,peers):
         self.host = host
@@ -63,6 +71,7 @@ class Node:
         self.chain = lib.create_blockchain_heap()
         self.chain_lock = threading.Lock()
         self.stop_flag = ctypes.c_int(0)
+        self.state = NodeState.SYNCING
 
     #---Mining---
 
@@ -113,6 +122,42 @@ class Node:
             except OSError as e:
                 print(f"Nu am putut trimite catre peer {peer_host}:{peer_port}: {e}")
 
+    def sync_with_peers(self):
+        print(f"[{self.port}] SYNCING: interoghez {len(self.peers)} peer(i)...")
+        for peer_host, peer_port in self.peers:
+            try:
+                sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+                sock.settimeout(3)
+                sock.connect((peer_host,peer_port))
+                send_message(sock,{"type":"GET_CHAIN"})
+                response = receive_message(sock)
+                sock.close()
+            except OSError as e:
+                print(f"[{self.port}] Peer {peer_host}:{peer_port} indisponibil la sincronizare: {e}")
+                continue
+
+            if response.get("type") != "CHAIN_RESPONSE":
+                continue
+
+            chain_bytes = base64.b64decode(response["data"])
+
+            with self.chain_lock:
+                new_chain = lib.deserialize_chain(chain_bytes, len(chain_bytes))
+                decision, local_len, received_len = resolve_fork(lib, self.chain, new_chain)
+
+                if decision == ForkResolution.ADOPTED:
+                    old_chain = self.chain
+                    self.chain = new_chain
+                    lib.destroy_blockchain(old_chain)
+                    print(f"[{self.port}] SYNCING: adoptat lant de {received_len} blocuri "
+                          f"de la {peer_host}:{peer_port} (aveam {local_len}).")
+                else:
+                    lib.destroy_blockchain(new_chain)
+
+        self.state = NodeState.SYNCED
+        print(f"[{self.port}] SYNCED -- incep minarea.")
+
+
 # ---------------- Handling mesaje primite ----------------
     def handle_message(self,msg):
         msg_type = msg.get("type")
@@ -131,26 +176,41 @@ class Node:
 
             with self.chain_lock:
                 new_chain = lib.deserialize_chain(chain_bytes,len(chain_bytes))
-                
-                if not new_chain or not lib.is_chain_valid(new_chain):
+                decision, local_len, received_len = resolve_fork(lib,self.chain,new_chain)
+
+                if decision == ForkResolution.REJECTED_INVALID:
                     if new_chain:
                         lib.destroy_blockchain(new_chain)
                     print("Lant primit invalid, ignorat.")
                     return {"type": "ERROR", "data": "chain invalid"}
-                
-                local_len = lib.get_chain_length(self.chain)
-                received_len = lib.get_chain_length(new_chain)
 
-                if received_len > local_len:
-                    old_chain = self.chain
-                    self.chain = new_chain
-                    lib.destroy_blockchain(old_chain)
-                    print(f"Lant adoptat: {received_len} blocuri (anterior {local_len}).")
-                else:
+                if decision == ForkResolution.REJECTED_SHORTER:
                     lib.destroy_blockchain(new_chain)
                     print(f"Lant primit ({received_len}) nu e mai lung ({local_len}), ignorat.")
+                    return {"type": "ACK", "data": "block procesat"}
+
+                old_ptr = ctypes.c_void_p()
+                old_len = lib.serialize_chain(self.chain,ctypes.byref(old_ptr))
+                old_chain_bytes = ctypes.string_at(old_ptr,old_len)
+                lib.free_serialized_buffer(old_ptr)
+
+                old_chain_handle = self.chain
+                self.chain = new_chain
+                lib.destroy_blockchain(old_chain_handle)
+                print(f"Lant adoptat: {received_len} blocuri (anterior {local_len}).")
+
+            old_blocks = parse_chain(old_chain_bytes)
+            new_blocks = parse_chain(chain_bytes)
+            orphaned_txs = find_orphaned_transactions(old_blocks, new_blocks)
+ 
+            if orphaned_txs:
+                for sender, receiver, amount in orphaned_txs:
+                    self.mempool.add_transaction(sender, receiver, amount)
+                print(f"{len(orphaned_txs)} tranzactii orfane repuse in mempool.")
+
             return {"type": "ACK", "data": "block procesat"}
-        
+
+
         if msg_type == "GET_CHAIN":
             with self.chain_lock:
                 out_ptr = ctypes.c_void_p()
@@ -192,9 +252,22 @@ class Node:
             server_sock.close()
 
     def run(self):
-            miner_thread = threading.Thread(target=self.mining_loop,daemon=True)
-            miner_thread.start()
-            self.listen_loop()
+        listener_thread = threading.Thread(target=self.listen_loop, daemon=True)
+        listener_thread.start()
+
+        # 2) SYNCING: incercam sa preluam cel mai lung lant existent
+        #    inainte sa incepem sa minam pe un lant posibil invechit.
+        self.sync_with_peers()
+
+        # 3) SYNCED: abia acum pornim minarea.
+        miner_thread = threading.Thread(target=self.mining_loop, daemon=True)
+        miner_thread.start()
+
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nOprire nod (Ctrl+C primit)...")
     
 def parse_peers(peers_str):
     if not peers_str:
@@ -212,52 +285,4 @@ if __name__ == "__main__":
 
     node = Node("127.0.0.1", port, peers)
     node.run()
-
-
-
-
-
-# def handle_message(msg: dict,mempool: Mempool) -> dict:
-#     msg_type = msg.get("type")
-
-#     if msg_type == "NEW_TRANSACTION":
-#         tx = msg["data"]
-#         mempool.add_transaction(tx["sender"],tx["receiver"],tx["amount"])
-#         print(f"Tranzactie adaugata: {tx}. Marime mempool: {mempool.size()}")
-#         return {"type": "ACK", "data": "tranzactie primita"}
-
-#     print(f"Tip de mesaj necunoscut: {msg_type}")
-#     return {"type": "ERROR", "data": f"tip necunoscut: {msg_type}"}
-
-# def run_node(host: str, port: int):
-#     mempool = Mempool()
-
-#     server_sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-#     server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-#     server_sock.bind((host, port))
-#     server_sock.listen()
-#     print(f"Nod pornit, ascult pe {host}:{port}...")
-
-#     try:
-#         while True:
-#             conn, addr = server_sock.accept()
-#             print(f"Conexiune noua de la {addr}")
-#             try:
-#                 msg = receive_message(conn)
-#                 response = handle_message(msg,mempool)
-#                 send_message(conn,response)
-#             except ConnectionError as e:
-#                 print(f"Conexiune inchisa neasteptat: {e}")
-#             finally:
-#                 conn.close()
-#     except KeyboardInterrupt:
-#         print("\nOprire nod (Ctrl+C primit)...")
-#     finally:
-#         server_sock.close()
-
-# if __name__ == "__main__":
-#     port = int(sys.argv[1]) if len(sys.argv) > 1 else 9001
-#     run_node("127.0.0.1", port)
-
-
 

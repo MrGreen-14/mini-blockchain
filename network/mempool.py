@@ -9,8 +9,8 @@ class Mempool:
         with self._lock:
             self._transactions.append((sender,receiver,amount))
 
-    def get_pending(self,max_count: int= None):
-        """Returneaza o COPIE a tranzactiilor curente (nu le scoate)."""
+    def get_pending(self,max_count: int= None): 
+        """Returneaza o COPIE a tranzactiilor curente (nu le scoate).""" #Docstring
         with self._lock:
             if max_count is None:
                 return list(self._transactions)
