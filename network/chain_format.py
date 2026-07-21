@@ -2,9 +2,10 @@ import struct
 
 HASH_SIZE = 65
 ADDRESS_SIZE = 65
+SIGNATURE_SIZE = 64  # r(32) + s(32)
 
 BLOCKCHAIN_MAGIC = 0x424C4B43
-BLOCKCHAIN_VERSION = 1
+BLOCKCHAIN_VERSION = 2
 
 
 def _read_fixed_str(buffer, offset, size):
@@ -14,6 +15,9 @@ def _read_fixed_str(buffer, offset, size):
         end = size
     return raw[:end].decode("ascii"), offset + size
 
+def _read_fixed_bytes(buffer,offset,size):
+    raw = buffer[offset: offset + size]
+    return raw, offset + size
 
 def parse_chain(buffer: bytes):
     offset = 0
@@ -51,10 +55,11 @@ def parse_chain(buffer: bytes):
 
         transactions = []
         for _ in range(tx_count):
-            sender, offset = _read_fixed_str(buffer, offset, ADDRESS_SIZE)
-            receiver, offset = _read_fixed_str(buffer, offset, ADDRESS_SIZE)
+            sender, offset = _read_fixed_bytes(buffer, offset, ADDRESS_SIZE)
+            receiver, offset = _read_fixed_bytes(buffer, offset, ADDRESS_SIZE)
             amount, = struct.unpack_from("<Q", buffer, offset)
             offset += 8
+            signature,offset = _read_fixed_bytes(buffer,offset,SIGNATURE_SIZE)
             transactions.append((sender, receiver, amount))
 
         blocks.append({
@@ -68,7 +73,6 @@ def parse_chain(buffer: bytes):
 
     return blocks
 
-
 def find_orphaned_transactions(old_blocks, new_blocks):
     new_hash_by_index = {b["index"]: b["hash"] for b in new_blocks}
 
@@ -77,9 +81,6 @@ def find_orphaned_transactions(old_blocks, new_blocks):
         for block in new_blocks
         for tx in block["transactions"]
     }
-
-    print(new_hash_by_index)
-    print(f"Pe lantul nou se afla tranzactiile{new_tx_set}")
 
     orphaned = []
     for block in old_blocks:
@@ -92,7 +93,7 @@ def find_orphaned_transactions(old_blocks, new_blocks):
 
         for tx in block["transactions"]:
             sender = tx[0]
-            if sender == "COINBASE":
+            if sender.startswith(b"COINBASE"):
                 continue
             if tx in new_tx_set:
                 continue

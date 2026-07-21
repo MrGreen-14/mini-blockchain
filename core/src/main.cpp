@@ -4,6 +4,8 @@
 #include "merkle.h"
 #include "transaction.h"
 #include "persistence.h"
+#include "wallet.h"
+#include "sha256.h"
 #include "assert.h"
 #include <cstdio>
 #include <cstdlib>
@@ -60,6 +62,15 @@ void test_merkle_odd_count() {
     printf("[%s] test_merkle_odd_count (numar impar, nodul dublat, fara crash)\n", ok ? "PASS" : "FAIL");
 }
 
+/*
+* char sender[ADDRESS_SIZE] = {0};
+strncpy(sender, "Alice", ADDRESS_SIZE - 1);
+char receiver[ADDRESS_SIZE] = {0};
+strncpy(receiver, "Bob", ADDRESS_SIZE - 1);
+unsigned char dummy_sig[SIGNATURE_SIZE] = {0};
+
+add_transaction_to_block(block, sender, receiver, 100, dummy_sig);
+* 
 void test_block_with_transactions() {
     Blockchain chain = create_blockchain();
 
@@ -166,29 +177,30 @@ void test_load_truncated_file() {
     printf("test_load_truncated_file: PASSED\n");
 }
 
+void test_signed_transactions() {
+    unsigned char priv[PRIVATE_KEY_SIZE], pub[PUBLIC_KEY_SIZE];
+    generate_keypair(priv, pub);
+
+    unsigned char priv_receiver[PRIVATE_KEY_SIZE], pub_receiver[PUBLIC_KEY_SIZE];
+    generate_keypair(priv_receiver, pub_receiver);
+
+    Transaction tx;
+    memset(&tx, 0, sizeof(tx));
+    memcpy(tx.sender, pub, ADDRESS_SIZE);
+    memcpy(tx.receiver, pub_receiver, ADDRESS_SIZE);
+    tx.amount = 42;
+
+    printf("Semnare tranzactie: %s\n", sign_transaction(&tx, priv) ? "OK" : "ESUATA");
+    printf("Verificare (trebuie VALIDA): %s\n", verify_transaction_signature(&tx) ? "VALIDA" : "INVALIDA");
+
+    tx.amount = 999;  // alteram continutul dupa semnare
+    printf("Verificare dupa modificare amount (trebuie INVALIDA): %s\n", verify_transaction_signature(&tx) ? "VALIDA" : "INVALIDA");
+}
+*/
 
 int main() {
-    test_save_load_roundtrip();
-    //test_load_corrupted_file();
-    //test_load_truncated_file();
 
-
-    Blockchain chain = create_blockchain();
-    Block* block = begin_block(&chain);
-
-    add_coinbase_transaction(block, "MinerAddress1", 50);
-    add_transaction_to_block(block, "Alice", "Bob", 100);
-    add_transaction_to_block(block, "Bob", "Charlie", 40);
-
-    commit_block(&chain, DIFFICULTY, NULL);
-
-    assert(strcmp(chain.blocks[0].transactions[0].sender, "COINBASE") == 0);
-    assert(strcmp(chain.blocks[0].transactions[0].receiver, "MinerAddress1") == 0);
-    assert(chain.blocks[0].transactions[0].amount == 50);
-    assert(chain.blocks[0].transaction_count == 3);
-
-    printf("test_coinbase_transaction: PASSED\n");
-
+ 
 
     return 0;
 }

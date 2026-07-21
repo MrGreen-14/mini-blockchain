@@ -22,7 +22,7 @@ struct Block {
 };
 
 Block create_block(uint32_t index, const char* prev_hash);
-BLOCKCHAIN_API void add_transaction_to_block(Block* block, const char* sender, const char* receiver, uint64_t amount);
+BLOCKCHAIN_API void add_transaction_to_block(Block* block, const char* sender, const char* receiver, uint64_t amount, const unsigned char* signature);
 void finalize_merkle_root(Block* block);
 
 void free_block(Block* block);

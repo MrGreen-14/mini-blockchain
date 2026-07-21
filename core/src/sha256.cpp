@@ -11,3 +11,7 @@ void compute_sha256_hex(const unsigned char* data, size_t lenght, char output_he
 	}
 	output_hex[64] = '\0';
 }
+
+void compute_sha256_raw(const unsigned char* data, size_t lenght, unsigned char output_raw[32]) {
+	SHA256(data, lenght, output_raw);
+}

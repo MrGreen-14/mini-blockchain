@@ -24,18 +24,20 @@ set(CORE_SOURCES
     include/export.h 
     include/bridge_test.h 
     src/bridge_test.cpp
+    include/wallet.h
+    src/wallet.cpp
 )
 
 add_executable(blockchain_core
     src/main.cpp
     ${CORE_SOURCES}
- )
+  )
 target_include_directories(blockchain_core PRIVATE include)
 target_link_libraries(blockchain_core PRIVATE OpenSSL::Crypto)
 
 add_library(blockchain_shared SHARED
     ${CORE_SOURCES}
-)
+ )
 target_include_directories(blockchain_shared PRIVATE include)
 target_link_libraries(blockchain_shared PRIVATE OpenSSL::Crypto)
 target_compile_definitions(blockchain_shared PRIVATE BUILDING_SHARED_LIB)

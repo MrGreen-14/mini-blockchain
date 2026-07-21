@@ -28,7 +28,7 @@ Block create_block(uint32_t index, const char* prev_hash) {
 	return block;
 }
 
-void add_transaction_to_block(Block* block, const char* sender, const char* receiver, uint64_t amount) {
+void add_transaction_to_block(Block* block, const char* sender, const char* receiver, uint64_t amount,const unsigned char* signature) {
 	if (block->transaction_count == block->transaction_capacity) {
 		size_t new_capacity = (block->transaction_capacity == 0) ? 
 			INITIAL_TX_CAPACITY : block->transaction_capacity * 2;
@@ -42,13 +42,10 @@ void add_transaction_to_block(Block* block, const char* sender, const char* rece
 
 	Transaction* tx = &block->transactions[block->transaction_count];
 
-	strncpy(tx->sender, sender, ADDRESS_SIZE - 1);
-	tx->sender[ADDRESS_SIZE - 1] = '\0';
-
-	strncpy(tx->receiver, receiver, ADDRESS_SIZE - 1);
-	tx->receiver[ADDRESS_SIZE - 1] = '\0';
-
+	memcpy(tx->sender, sender, ADDRESS_SIZE);
+	memcpy(tx->receiver, receiver, ADDRESS_SIZE);
 	tx->amount = amount;
+	memcpy(tx->signature, signature, SIGNATURE_SIZE);
 
 	block->transaction_count++;
 }

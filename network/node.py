@@ -11,6 +11,7 @@ from protocol import receive_message,send_message
 from mempool import Mempool
 from consensus import ForkResolution, resolve_fork
 from chain_format import parse_chain,find_orphaned_transactions
+from chain_format import ADDRESS_SIZE, SIGNATURE_SIZE
 
 DIFFICULTY = 4
 BLOCK_REWARD = 50
@@ -33,9 +34,14 @@ lib.add_coinbase_transaction.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctype
 lib.add_coinbase_transaction.restype = None
 
 lib.add_transaction_to_block.argtypes = [
-    ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint64
+    ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint64, ctypes.c_char_p
 ]
 lib.add_transaction_to_block.restype = None
+
+lib.verify_transaction_signature_raw.argtypes = [
+    ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint64, ctypes.c_char_p
+]
+lib.verify_transaction_signature_raw.restype = ctypes.c_int
 
 lib.commit_block.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
 lib.commit_block.restype = ctypes.c_int
@@ -84,10 +90,8 @@ class Node:
             with self.chain_lock:
                 block = lib.begin_block(self.chain)
                 lib.add_coinbase_transaction(block,self.miner_address,BLOCK_REWARD)
-                for sender,receiver,amount in pending:
-                    lib.add_transaction_to_block(
-                        block, sender.encode("utf-8"),receiver.encode("utf-8"),amount
-                    )
+                for sender,receiver,amount, signature in pending:
+                   lib.add_transaction_to_block(block, sender, receiver, amount, signature)
 
                 self.stop_flag.value=0
                 success = lib.commit_block(self.chain, DIFFICULTY,ctypes.byref(self.stop_flag))
@@ -164,8 +168,25 @@ class Node:
 
         if msg_type == "NEW_TRANSACTION":
             tx = msg["data"]
-            self.mempool.add_transaction(tx["sender"],tx["receiver"],tx["amount"])
-            print(f"Tranzactie adaugata: {tx}. Marime mempool: {self.mempool.size()}")
+            try:
+                sender = base64.b64decode(tx["sender"])
+                receiver = base64.b64decode(tx["receiver"])
+                amount = tx["amount"]
+                signature = base64.b64decode(tx["signature"])
+            except(KeyError<ValueError,TypeError) as e:
+                return{"type":"ERROR","data":f"tranzactie malformata: {e}"}
+
+            if len(sender) != ADDRESS_SIZE or len(receiver) != ADDRESS_SIZE:
+                return {"type": "ERROR", "data": "adresa cu lungime invalida"}
+            if len(signature) != SIGNATURE_SIZE:
+                return {"type": "ERROR", "data": "semnatura cu lungime invalida"}
+
+            if not lib.verify_transaction_signature_raw(sender,receiver,amount,signature):
+                print(f"Tranzactie respinsa: semnatura invalida (sender={sender.hex()[:12]}...)")
+                return {"type": "ERROR", "data": "semnatura invalida"}
+
+            self.mempool.add_transaction(sender, receiver, amount, signature)
+            print(f"Tranzactie adaugata (semnatura valida). Marime mempool: {self.mempool.size()}")
             return {"type": "ACK", "data": "tranzactie primita"}
 
         if msg_type == "NEW_BLOCK" :

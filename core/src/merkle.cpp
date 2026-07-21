@@ -7,7 +7,7 @@
 static void hash_transaction(const Transaction* tx, char output_hex[65]) {
 	char buffer[256];
 	serialize_transaction(tx, buffer, sizeof(buffer));
-	compute_sha256_hex((const unsigned char*)buffer, strlen(buffer), output_hex);
+	compute_sha256_hex((const unsigned char*)buffer, TX_SERIALIZED_SIZE, output_hex);
 }
 
 void compute_merkle_root(const Transaction* transactions, size_t count, char output_hex[65]) {
