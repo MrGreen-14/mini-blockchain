@@ -22,8 +22,6 @@ set(CORE_SOURCES
     include/persistence.h
     src/persistence.cpp
     include/export.h 
-    include/bridge_test.h 
-    src/bridge_test.cpp
     include/wallet.h
     src/wallet.cpp
 )
