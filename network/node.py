@@ -17,7 +17,7 @@ from consensus import ForkResolution, resolve_fork
 from chain_format import parse_chain,find_orphaned_transactions
 from chain_format import ADDRESS_SIZE, SIGNATURE_SIZE
 
-DIFFICULTY = 4
+DIFFICULTY = 5
 BLOCK_REWARD = 50
 MAX_TX_PER_BLOCK = 10
 
@@ -71,10 +71,11 @@ class NodeState(Enum):
     SYNCED = "SYNCED"
 
 class Node:
-    def __init__(self,host,port,peers):
+    def __init__(self,host,port,peers,is_miner=True):
         self.host = host
         self.port = port
         self.peers = peers
+        self.is_miner = is_miner
         self.miner_address = f"Miner-{port}".encode("utf-8")
 
         self.mempool = Mempool()
@@ -92,6 +93,9 @@ class Node:
                 time.sleep(1)
                 continue
             with self.chain_lock:
+                pending = self.mempool.get_pending(max_count=MAX_TX_PER_BLOCK)
+                if not pending:
+                    continue
                 block = lib.begin_block(self.chain)
                 lib.add_coinbase_transaction(block,self.miner_address,BLOCK_REWARD)
                 for sender,receiver,amount, signature in pending:
@@ -341,8 +345,12 @@ class Node:
         
         self.sync_with_peers()
 
-        miner_thread = threading.Thread(target=self.mining_loop, daemon=True)
-        miner_thread.start()
+        if self.is_miner:
+            miner_thread = threading.Thread(target=self.mining_loop, daemon=True)
+            miner_thread.start()
+            print(f"[{self.port}] Rol: MINER")
+        else:
+            print(f"[{self.port}] Rol: RELAY (nu mineaza, doar propaga)")
 
         try:
             while True:
@@ -364,9 +372,13 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 9001
     peers_arg = sys.argv[2] if len(sys.argv) > 2 else ""
     peers = parse_peers(peers_arg)
- 
-    api_port = port + 1000
-    #portul API = portul P2P + 1000 / (9001 -> API pe 10001)
-    node = Node("127.0.0.1", port, peers)
-    node.run(api_port=api_port)
 
+    # al treilea argument optional: "relay" = nu mineaza
+    is_miner = True
+    if len(sys.argv) > 3 and sys.argv[3] == "relay":
+        is_miner = False
+
+    #portul API = portul P2P + 1000 / (9001 -> API pe 10001)
+    api_port = port + 1000
+    node = Node("127.0.0.1", port, peers, is_miner=is_miner)
+    node.run(api_port=api_port)
