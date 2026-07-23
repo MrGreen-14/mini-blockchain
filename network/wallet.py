@@ -7,8 +7,8 @@ import binascii
 
 from protocol import send_message, receive_message
 
-PRIVATE_KEY_SIZE = 32
-PUBLIC_KEY_SIZE = 65
+from wallet_keys import PRIVATE_KEY_SIZE, PUBLIC_KEY_SIZE, load_private_key, load_public_key, save_keypair
+
 SIGNATURE_SIZE = 64
 
 dll_path = os.path.join(os.path.dirname(__file__), "..", "core", "build", "blockchain_core.dll")
@@ -16,7 +16,6 @@ dll_path = os.path.abspath(dll_path)
 lib = ctypes.CDLL(dll_path)
 
 lib.generate_keypair.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-lib.generate_keypair.restype = ctypes.c_int
 
 lib.sign_transaction_raw.argtypes = [
     ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint64, ctypes.c_char_p, ctypes.c_char_p
@@ -27,35 +26,13 @@ def generate_and_save_keypair(name):
     priv = ctypes.create_string_buffer(PRIVATE_KEY_SIZE)
     pub = ctypes.create_string_buffer(PUBLIC_KEY_SIZE)
 
-    if not lib.generate_keypair(priv,pub):
+    if not lib.generate_keypair(priv, pub):
         raise RuntimeError("Generare chei esuata")
-    
-    with open(f"{name}.priv","wb") as f:
-        f.write(priv.raw)
-    with open(f"{name}.pub", "wb") as f:
-        f.write(pub.raw)
-    
-    print(f"Chei generate: {name}.priv (SECRETA -- nu o trimite niciodata), {name}.pub (adresa publica)")
+
+    priv_path, pub_path = save_keypair(name, priv.raw, pub.raw)
+
+    print(f"Chei generate: {priv_path} (SECRETA -- nu o trimite niciodata), {pub_path} (adresa publica)")
     print(f"Adresa (hex): {priv.raw and pub.raw.hex()}")
-
-def load_private_key(name):
-    with open(f"{name}.priv","rb") as f:
-        data = f.read()
-    if len(data) != PRIVATE_KEY_SIZE:
-        raise ValueError(f"Fisier cheie privata corupt: {len(data)} bytes, asteptam {PRIVATE_KEY_SIZE}")
-    return data
-
-def load_public_key(name_or_hex):
-    pub_path = f"{name_or_hex}.pub"
-    if os.path.exists(pub_path):
-        with open(pub_path, "rb") as f:
-            data = f.read()
-    else:
-       data = binascii.unhexlify(name_or_hex)
-    
-    if len(data) != PUBLIC_KEY_SIZE:
-        raise ValueError(f"Cheie publica cu lungime invalida: {len(data)} bytes, asteptam {PUBLIC_KEY_SIZE}")
-    return data
 
 def send_signed_transaction(host, port, sender_priv, sender_pub, receiver_pub, amount):
     signature = ctypes.create_string_buffer(SIGNATURE_SIZE)

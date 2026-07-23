@@ -19,8 +19,8 @@ import sys
 import base64
 import json
 
-PRIVATE_KEY_SIZE = 32
-PUBLIC_KEY_SIZE = 65
+from wallet_keys import PRIVATE_KEY_SIZE, PUBLIC_KEY_SIZE, load_private_key, load_public_key
+
 SIGNATURE_SIZE = 64
 
 dll_path = os.path.join(os.path.dirname(__file__), "..", "core", "build", "blockchain_core.dll")
@@ -31,17 +31,6 @@ lib.sign_transaction_raw.argtypes = [
     ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint64, ctypes.c_char_p, ctypes.c_char_p
 ]
 lib.sign_transaction_raw.restype = ctypes.c_int
-
-
-def load_private_key(name):
-    with open(f"{name}.priv", "rb") as f:
-        return f.read()
-
-
-def load_public_key(name):
-    with open(f"{name}.pub", "rb") as f:
-        return f.read()
-
 
 if __name__ == "__main__":
     sender_name = sys.argv[1]
