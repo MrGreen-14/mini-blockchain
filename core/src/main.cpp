@@ -1,206 +1,316 @@
-#include "block.h"
 #include "blockchain.h"
+#include "block.h"
 #include "mining.h"
 #include "merkle.h"
 #include "transaction.h"
 #include "persistence.h"
 #include "wallet.h"
 #include "sha256.h"
-#include "assert.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-static void make_tx(Transaction* tx, const char* sender, const char* receiver, uint64_t amount) {
-    strncpy(tx->sender, sender, ADDRESS_SIZE - 1);
-    tx->sender[ADDRESS_SIZE - 1] = '\0';
-    strncpy(tx->receiver, receiver, ADDRESS_SIZE - 1);
-    tx->receiver[ADDRESS_SIZE - 1] = '\0';
-    tx->amount = amount;
+
+#define TEST_DIFFICULTY 2
+
+//  1. Portofel: generare chei, semnare, verificare, detectie alterare
+static int test_wallet_sign_verify() {
+    unsigned char priv[PRIVATE_KEY_SIZE], pub[PUBLIC_KEY_SIZE];
+    if (!generate_keypair(priv, pub)) {
+        printf("[FAIL] test_wallet_sign_verify -- generate_keypair esuat\n");
+        return 0;
+    }
+
+   
+    unsigned char hash[32];
+    memset(hash, 0, 32);
+    compute_sha256_raw((const unsigned char*)"test data", 9, hash);
+
+    unsigned char sig[SIGNATURE_SIZE];
+    if (!sign_hash(priv, hash, sig)) {
+        printf("[FAIL] test_wallet_sign_verify -- sign_hash esuat\n");
+        return 0;
+    }
+
+    // verificarea cu cheia publica corecta trebuie sa treaca
+    if (!verify_hash_signature(pub, hash, sig)) {
+        printf("[FAIL] test_wallet_sign_verify -- semnatura valida respinsa\n");
+        return 0;
+    }
+
+    // alteram un byte din hash -- verificarea trebuie sa esueze
+    hash[0] ^= 0xFF;
+    if (verify_hash_signature(pub, hash, sig)) {
+        printf("[FAIL] test_wallet_sign_verify -- semnatura invalida acceptata dupa alterare hash\n");
+        return 0;
+    }
+
+    // alteram un byte din semnatura (cu hash-ul original) -- la fel, trebuie sa esueze
+    hash[0] ^= 0xFF; // revenim la hash initial
+    sig[0] ^= 0xFF;
+    if (verify_hash_signature(pub, hash, sig)) {
+        printf("[FAIL] test_wallet_sign_verify -- semnatura alterata acceptata\n");
+        return 0;
+    }
+
+    printf("[PASS] test_wallet_sign_verify\n");
+    return 1;
 }
 
-void test_merkle_determinism() {
-    Transaction txs[2];
-    make_tx(&txs[0], "Alice", "Bob", 100);
-    make_tx(&txs[1], "Bob", "Carol", 50);
 
-    char root1[65], root2[65];
-    compute_merkle_root(txs, 2, root1);
-    compute_merkle_root(txs, 2, root2);
+//  2. Pipeline complet: chei -> tranzactie semnata + coinbase -> minare ->  lant valid   
+static int test_signed_chain_pipeline() {
+    // generam doua perechi de chei (expeditor + destinatar)
+    unsigned char priv_a[PRIVATE_KEY_SIZE], pub_a[PUBLIC_KEY_SIZE];
+    unsigned char priv_b[PRIVATE_KEY_SIZE], pub_b[PUBLIC_KEY_SIZE];
+    generate_keypair(priv_a, pub_a);
+    generate_keypair(priv_b, pub_b);
 
-    int ok = (strcmp(root1, root2) == 0);
-    printf("[%s] test_merkle_determinism\n", ok ? "PASS" : "FAIL");
-}
+    // semnam o tranzactie: A -> B, 100 unitati
+    unsigned char sig[SIGNATURE_SIZE];
+    if (!sign_transaction_raw((const char*)pub_a, (const char*)pub_b, 100, priv_a, sig)) {
+        printf("[FAIL] test_signed_chain_pipeline -- sign_transaction_raw esuat\n");
+        return 0;
+    }
 
-void test_merkle_sensitivity() {
-    Transaction txs[2];
-    make_tx(&txs[0], "Alice", "Bob", 100);
-    make_tx(&txs[1], "Bob", "Carol", 50);
+    // verificam semnatura inainte de a o pune in bloc
+    if (!verify_transaction_signature_raw((const char*)pub_a, (const char*)pub_b, 100, sig)) {
+        printf("[FAIL] test_signed_chain_pipeline -- verify esuat pe semnatura proaspata\n");
+        return 0;
+    }
 
-    char root_before[65];
-    compute_merkle_root(txs, 2, root_before);
-
-    txs[1].amount = 51;
-
-    char root_after[65];
-    compute_merkle_root(txs, 2, root_after);
-
-    int ok = (strcmp(root_before, root_after) != 0);
-    printf("[%s] test_merkle_sensitivity (avalanche la nivel de Merkle root)\n", ok ? "PASS" : "FAIL");
-}
-
-void test_merkle_odd_count() {
-    Transaction txs[3];
-    make_tx(&txs[0], "A", "B", 1);
-    make_tx(&txs[1], "B", "C", 2);
-    make_tx(&txs[2], "C", "D", 3);
-
-    char root[65];
-    compute_merkle_root(txs, 3, root);
-
-    int ok = (strlen(root) == 64);
-    printf("[%s] test_merkle_odd_count (numar impar, nodul dublat, fara crash)\n", ok ? "PASS" : "FAIL");
-}
-
-/*
-* char sender[ADDRESS_SIZE] = {0};
-strncpy(sender, "Alice", ADDRESS_SIZE - 1);
-char receiver[ADDRESS_SIZE] = {0};
-strncpy(receiver, "Bob", ADDRESS_SIZE - 1);
-unsigned char dummy_sig[SIGNATURE_SIZE] = {0};
-
-add_transaction_to_block(block, sender, receiver, 100, dummy_sig);
-* 
-void test_block_with_transactions() {
+    // construim un lant cu un singur bloc: coinbase + tranzactia semnata
     Blockchain chain = create_blockchain();
-
     Block* b = begin_block(&chain);
-    add_transaction_to_block(b, "Alice", "Bob", 500);
-    add_transaction_to_block(b, "Bob", "Carol", 200);
-    commit_block(&chain, DIFFICULTY,NULL);
-
-    Block* committed = &chain.blocks[0];
-    int ok = (strlen(committed->merkle_root) == 64) && (committed->transaction_count == 2);
-    printf("[%s] test_block_with_transactions\n", ok ? "PASS" : "FAIL");
-
-    free_blockchain(&chain);
-}
-
-void test_chain_valid_with_transactions() {
-    Blockchain chain = create_blockchain();
-
-    Block* b1 = begin_block(&chain);
-    add_transaction_to_block(b1, "Alice", "Bob", 500);
-    commit_block(&chain, DIFFICULTY, NULL);
-
-    Block* b2 = begin_block(&chain);
-    add_transaction_to_block(b2, "Bob", "Carol", 200);
-    add_transaction_to_block(b2, "Carol", "Dave", 100);
-    commit_block(&chain, DIFFICULTY, NULL);
+    add_coinbase_transaction(b, "Miner-Test", 50);
+    add_transaction_to_block(b, (const char*)pub_a, (const char*)pub_b, 100, sig);
+    commit_block(&chain, TEST_DIFFICULTY, NULL);
 
     int valid = is_chain_valid(&chain);
-    printf("[%s] test_chain_valid_with_transactions\n", valid ? "PASS" : "FAIL");
-
     free_blockchain(&chain);
+
+    if (!valid) {
+        printf("[FAIL] test_signed_chain_pipeline -- lantul nu trece is_chain_valid\n");
+        return 0;
+    }
+
+    printf("[PASS] test_signed_chain_pipeline\n");
+    return 1;
 }
 
-void test_transaction_tampering_detected() {
+//3. Persistenta: serializare -> deserializare -> lantul restaurat e valid
+
+static int test_persistence_roundtrip() {
+    unsigned char priv_a[PRIVATE_KEY_SIZE], pub_a[PUBLIC_KEY_SIZE];
+    unsigned char priv_b[PRIVATE_KEY_SIZE], pub_b[PUBLIC_KEY_SIZE];
+    generate_keypair(priv_a, pub_a);
+    generate_keypair(priv_b, pub_b);
+
+    unsigned char sig[SIGNATURE_SIZE];
+    sign_transaction_raw((const char*)pub_a, (const char*)pub_b, 200, priv_a, sig);
+
+    // lant cu 2 blocuri (fiecare cu coinbase + o tranzactie semnata)
     Blockchain chain = create_blockchain();
 
     Block* b1 = begin_block(&chain);
-    add_transaction_to_block(b1, "Alice", "Bob", 500);
-    commit_block(&chain, DIFFICULTY, NULL);
+    add_coinbase_transaction(b1, "Miner-Test", 50);
+    add_transaction_to_block(b1, (const char*)pub_a, (const char*)pub_b, 200, sig);
+    commit_block(&chain, TEST_DIFFICULTY, NULL);
 
-    // Atac simulat: modificam suma DUPA commit, fara sa recalculam merkle root
-    chain.blocks[0].transactions[0].amount = 999999;
-
-    int valid = is_chain_valid(&chain);
-    printf("[%s] test_transaction_tampering_detected (lant INVALID)\n", !valid ? "PASS" : "FAIL");
-
-    free_blockchain(&chain);
-}
-
-void test_save_load_roundtrip(void) {
-    Blockchain chain = create_blockchain();
-
-    Block* b1 = begin_block(&chain);
-    add_transaction_to_block(b1, "alice", "bob", 100);   // <- string-uri + amount direct, nu &tx1
-    commit_block(&chain, DIFFICULTY, NULL);
+    // al doilea bloc: B -> A (semnatura noua, cu cheia privata a lui B)
+    unsigned char sig2[SIGNATURE_SIZE];
+    sign_transaction_raw((const char*)pub_b, (const char*)pub_a, 75, priv_b, sig2);
 
     Block* b2 = begin_block(&chain);
-    add_transaction_to_block(b2, "bob", "carol", 40);    // <- la fel
-    commit_block(&chain, DIFFICULTY, NULL);
+    add_coinbase_transaction(b2, "Miner-Test", 50);
+    add_transaction_to_block(b2, (const char*)pub_b, (const char*)pub_a, 75, sig2);
+    commit_block(&chain, TEST_DIFFICULTY, NULL);
 
-    int saved = save_chain_to_file(&chain, "test_chain.dat");
-    assert(saved);
+    // serializare in buffer
+    uint8_t* buffer = NULL;
+    size_t buf_len = serialize_chain(&chain, &buffer);
+    if (buf_len == 0 || buffer == NULL) {
+        printf("[FAIL] test_persistence_roundtrip -- serialize_chain a returnat 0\n");
+        free_blockchain(&chain);
+        return 0;
+    }
 
-    Blockchain* loaded = load_chain_from_file("test_chain.dat");
-    assert(loaded != NULL);
-    assert(loaded->count == chain.count);
-    assert(strcmp(loaded->blocks[1].hash, chain.blocks[1].hash) == 0);
-    assert(is_chain_valid(loaded));
+    // deserializare din buffer
+    Blockchain* loaded = deserialize_chain(buffer, buf_len);
+    free(buffer);
+
+    if (loaded == NULL) {
+        printf("[FAIL] test_persistence_roundtrip -- deserialize_chain a returnat NULL\n");
+        free_blockchain(&chain);
+        return 0;
+    }
+
+    // verificari: acelasi numar de blocuri, acelasi hash pe ultimul bloc, lant valid
+    int ok = 1;
+    if (loaded->count != chain.count) {
+        printf("[FAIL] test_persistence_roundtrip -- count difera: %zu vs %zu\n", loaded->count, chain.count);
+        ok = 0;
+    }
+    if (ok && strcmp(loaded->blocks[1].hash, chain.blocks[1].hash) != 0) {
+        printf("[FAIL] test_persistence_roundtrip -- hash-ul blocului 1 difera\n");
+        ok = 0;
+    }
+    if (ok && !is_chain_valid(loaded)) {
+        printf("[FAIL] test_persistence_roundtrip -- lantul restaurat nu trece is_chain_valid\n");
+        ok = 0;
+    }
 
     free_blockchain(&chain);
     free_blockchain(loaded);
-    printf("test_save_load_roundtrip: PASSED\n");
+    free(loaded);
+
+    if (ok) printf("[PASS] test_persistence_roundtrip\n");
+    return ok;
 }
 
-void test_load_corrupted_file() {
-    FILE* f = fopen("garbage.dat", "wb");
+//  4. Tamper detection: modificam suma dupa minare -> lant invalid
+
+static int test_tamper_after_mining() {
+    unsigned char priv[PRIVATE_KEY_SIZE], pub[PUBLIC_KEY_SIZE];
+    unsigned char priv_r[PRIVATE_KEY_SIZE], pub_r[PUBLIC_KEY_SIZE];
+    generate_keypair(priv, pub);
+    generate_keypair(priv_r, pub_r);
+
+    unsigned char sig[SIGNATURE_SIZE];
+    sign_transaction_raw((const char*)pub, (const char*)pub_r, 500, priv, sig);
+
+    Blockchain chain = create_blockchain();
+    Block* b = begin_block(&chain);
+    add_coinbase_transaction(b, "Miner-Test", 50);
+    add_transaction_to_block(b, (const char*)pub, (const char*)pub_r, 500, sig);
+    commit_block(&chain, TEST_DIFFICULTY, NULL);
+
+    // lantul trebuie sa fie valid INAINTE de alterare
+    if (!is_chain_valid(&chain)) {
+        printf("[FAIL] test_tamper_after_mining -- lantul nu e valid nici inainte de alterare\n");
+        free_blockchain(&chain);
+        return 0;
+    }
+
+    // atac simulat: un atacator modifica suma tranzactiei dupa minare,
+    // fara sa recalculeze merkle root sau hash-ul blocului
+    // (tranzactia 0 e coinbase, tranzactia 1 e cea semnata)
+    chain.blocks[0].transactions[1].amount = 999999;
+
+    int still_valid = is_chain_valid(&chain);
+    free_blockchain(&chain);
+
+    if (still_valid) {
+        printf("[FAIL] test_tamper_after_mining -- lantul e inca 'valid' dupa alterare!\n");
+        return 0;
+    }
+
+    printf("[PASS] test_tamper_after_mining\n");
+    return 1;
+}
+
+//  5. Input corupt: magic gresit + buffer trunchiat -> NULL, fara crash
+
+static int test_corrupted_input() {
+    // a) fisier cu magic gresit
+    const char* garbage_path = "test_garbage.dat";
+    FILE* f = fopen(garbage_path, "wb");
     uint32_t junk = 0xDEADBEEF;
     fwrite(&junk, sizeof(junk), 1, f);
     fclose(f);
 
-    Blockchain* loaded = load_chain_from_file("garbage.dat");
-    assert(loaded == NULL);
+    Blockchain* loaded = load_chain_from_file(garbage_path);
+    remove(garbage_path);
+    if (loaded != NULL) {
+        printf("[FAIL] test_corrupted_input -- fisier cu magic gresit acceptat\n");
+        destroy_blockchain(loaded);
+        return 0;
+    }
 
-    remove("garbage.dat");
-    printf("test_load_corrupted_file: PASSED\n");
-}
+    // b) buffer trunchiat: serializare valida, apoi trunchiata cu 10 bytes
+    unsigned char priv[PRIVATE_KEY_SIZE], pub[PUBLIC_KEY_SIZE];
+    unsigned char priv_r[PRIVATE_KEY_SIZE], pub_r[PUBLIC_KEY_SIZE];
+    generate_keypair(priv, pub);
+    generate_keypair(priv_r, pub_r);
 
-void test_load_truncated_file() {
+    unsigned char sig[SIGNATURE_SIZE];
+    sign_transaction_raw((const char*)pub, (const char*)pub_r, 1, priv, sig);
+
     Blockchain chain = create_blockchain();
-
     Block* b = begin_block(&chain);
-    add_transaction_to_block(b, "x", "y", 1);
-    commit_block(&chain, DIFFICULTY, NULL);
+    add_coinbase_transaction(b, "M", 50);
+    add_transaction_to_block(b, (const char*)pub, (const char*)pub_r, 1, sig);
+    commit_block(&chain, TEST_DIFFICULTY, NULL);
 
     uint8_t* buffer = NULL;
-    size_t length = serialize_chain(&chain, &buffer);
-    assert(length > 10);
-
-    Blockchain* loaded = deserialize_chain(buffer, length - 10);
-    assert(loaded == NULL);
-
-    free(buffer);
+    size_t buf_len = serialize_chain(&chain, &buffer);
     free_blockchain(&chain);
-    printf("test_load_truncated_file: PASSED\n");
+
+    if (buf_len < 10) {
+        printf("[FAIL] test_corrupted_input -- buffer prea scurt pentru test\n");
+        free(buffer);
+        return 0;
+    }
+
+    Blockchain* truncated = deserialize_chain(buffer, buf_len - 10);
+    free(buffer);
+
+    if (truncated != NULL) {
+        printf("[FAIL] test_corrupted_input -- buffer trunchiat acceptat\n");
+        free_blockchain(truncated);
+        free(truncated);
+        return 0;
+    }
+
+    printf("[PASS] test_corrupted_input\n");
+    return 1;
 }
 
-void test_signed_transactions() {
+// -------------------------------------------------------------------------- //
+//  6. Capacity boundary: mineaza 5 blocuri (peste INITIAL_CAPACITY=4) --     //
+//     forteaza realloc-ul din begin_block() si confirma ca nu mai crapa.    //
+// -------------------------------------------------------------------------- //
+static int test_capacity_growth() {
     unsigned char priv[PRIVATE_KEY_SIZE], pub[PUBLIC_KEY_SIZE];
+    unsigned char priv_r[PRIVATE_KEY_SIZE], pub_r[PUBLIC_KEY_SIZE];
     generate_keypair(priv, pub);
+    generate_keypair(priv_r, pub_r);
 
-    unsigned char priv_receiver[PRIVATE_KEY_SIZE], pub_receiver[PUBLIC_KEY_SIZE];
-    generate_keypair(priv_receiver, pub_receiver);
+    Blockchain chain = create_blockchain();
 
-    Transaction tx;
-    memset(&tx, 0, sizeof(tx));
-    memcpy(tx.sender, pub, ADDRESS_SIZE);
-    memcpy(tx.receiver, pub_receiver, ADDRESS_SIZE);
-    tx.amount = 42;
+    for (int i = 0; i < 5; i++) {
+        unsigned char sig[SIGNATURE_SIZE];
+        sign_transaction_raw((const char*)pub, (const char*)pub_r, 10, priv, sig);
 
-    printf("Semnare tranzactie: %s\n", sign_transaction(&tx, priv) ? "OK" : "ESUATA");
-    printf("Verificare (trebuie VALIDA): %s\n", verify_transaction_signature(&tx) ? "VALIDA" : "INVALIDA");
+        Block* b = begin_block(&chain);
+        add_coinbase_transaction(b, "Miner-Test", 50);
+        add_transaction_to_block(b, (const char*)pub, (const char*)pub_r, 10, sig);
+        commit_block(&chain, TEST_DIFFICULTY, NULL);
+    }
 
-    tx.amount = 999;  // alteram continutul dupa semnare
-    printf("Verificare dupa modificare amount (trebuie INVALIDA): %s\n", verify_transaction_signature(&tx) ? "VALIDA" : "INVALIDA");
+    int ok = (chain.count == 5) && is_chain_valid(&chain);
+    free_blockchain(&chain);
+
+    if (!ok) {
+        printf("[FAIL] test_capacity_growth -- lant invalid dupa cresterea capacitatii\n");
+        return 0;
+    }
+
+    printf("[PASS] test_capacity_growth (5 blocuri, capacitate crescuta 4 -> 8)\n");
+    return 1;
 }
-*/
 
 int main() {
+    printf("=== Teste Mini-Blockchain (arhitectura cu semnaturi EC) ===\n\n");
 
- 
+    int failed = 0;
+    failed += !test_wallet_sign_verify();
+    failed += !test_signed_chain_pipeline();
+    failed += !test_persistence_roundtrip();
+    failed += !test_tamper_after_mining();
+    failed += !test_corrupted_input();
+    failed += !test_capacity_growth();
 
-    return 0;
+    printf("\n--- Rezultat: %d/%d teste trecute ---\n", 6 - failed, 6);
+    return failed;
 }

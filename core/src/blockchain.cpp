@@ -31,10 +31,17 @@ void free_blockchain(Blockchain* chain) {
 
 Block* begin_block(Blockchain* chain) {
 	if (chain->count == chain->capacity) {
+		size_t old_capacity = chain->capacity;
 		chain->capacity *= 2;
 		Block* new_array = (Block*)realloc(chain->blocks, chain->capacity * sizeof(Block));
 		if (!new_array)exit(1);
 		chain->blocks = new_array;
+
+		// realloc NU zeroeste memoria noua -- fara asta, sloturile de la
+		// old_capacity in sus contin octeti la intamplare, iar verificarea
+		// de mai jos (transactions != NULL) poate citi un pointer invalid
+		// si crapa la free()
+		memset(chain->blocks + old_capacity, 0, (chain->capacity - old_capacity) * sizeof(Block));
 	}
 
 	// daca slotul a fost deja folosit intr-o incercare de minare anterioara,
