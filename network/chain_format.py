@@ -5,7 +5,7 @@ ADDRESS_SIZE = 65
 SIGNATURE_SIZE = 64  # r(32) + s(32)
 
 BLOCKCHAIN_MAGIC = 0x424C4B43
-BLOCKCHAIN_VERSION = 2
+BLOCKCHAIN_VERSION = 1
 
 
 def _read_fixed_str(buffer, offset, size):
@@ -59,8 +59,8 @@ def parse_chain(buffer: bytes):
             receiver, offset = _read_fixed_bytes(buffer, offset, ADDRESS_SIZE)
             amount, = struct.unpack_from("<Q", buffer, offset)
             offset += 8
-            signature,offset = _read_fixed_bytes(buffer,offset,SIGNATURE_SIZE)
-            transactions.append((sender, receiver, amount))
+            signature, offset = _read_fixed_bytes(buffer, offset, SIGNATURE_SIZE)
+            transactions.append((sender, receiver, amount, signature))
 
         blocks.append({
             "index": index,

@@ -1,12 +1,16 @@
-import ctypes
+import sys
 import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import socket
 import time
-import sys
+import ctypes
 import threading
 import base64
 from enum import Enum
 
+from api.app import create_app
 from protocol import receive_message,send_message
 from mempool import Mempool
 from consensus import ForkResolution, resolve_fork
@@ -115,16 +119,41 @@ class Node:
 
     def broadcast_new_block(self,chain_bytes):
         encoded = base64.b64encode(chain_bytes).decode("ascii")
-        for peer_host,peer_port in self.peers:
-            try:
-                sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-                sock.settimeout(3)
-                sock.connect((peer_host,peer_port))
-                send_message(sock,{"type":"NEW_BLOCK","data":encoded})
-                receive_message(sock)
-                sock.close()
-            except OSError as e:
-                print(f"Nu am putut trimite catre peer {peer_host}:{peer_port}: {e}")
+        def _send():
+            for peer_host, peer_port in self.peers:
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(3)
+                    sock.connect((peer_host, peer_port))
+                    send_message(sock, {"type": "NEW_BLOCK", "data": encoded})
+                    receive_message(sock)
+                    sock.close()
+                except OSError as e:
+                    print(f"Nu am putut trimite catre peer {peer_host}:{peer_port}: {e}")
+        threading.Thread(target=_send, daemon=True).start()
+
+    def broadcast_new_transaction(self, sender, receiver, amount, signature):
+        payload = {
+            "type": "NEW_TRANSACTION",
+            "data": {
+                "sender": base64.b64encode(sender).decode("ascii"),
+                "receiver": base64.b64encode(receiver).decode("ascii"),
+                "amount": amount,
+                "signature": base64.b64encode(signature).decode("ascii"),
+            }
+        }
+        def _send():
+            for peer_host, peer_port in self.peers:
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(3)
+                    sock.connect((peer_host, peer_port))
+                    send_message(sock, payload)
+                    receive_message(sock)
+                    sock.close()
+                except OSError as e:
+                    print(f"Nu am putut trimite tranzactia catre peer {peer_host}:{peer_port}: {e}")
+        threading.Thread(target=_send, daemon=True).start()
 
     def sync_with_peers(self):
         print(f"[{self.port}] SYNCING: interoghez {len(self.peers)} peer(i)...")
@@ -161,8 +190,24 @@ class Node:
         self.state = NodeState.SYNCED
         print(f"[{self.port}] SYNCED -- incep minarea.")
 
-
 # ---------------- Handling mesaje primite ----------------
+    def receive_transaction(self, sender, receiver, amount, signature):
+        if len(sender) != ADDRESS_SIZE or len(receiver) != ADDRESS_SIZE:
+            return False, "adresa cu lungime invalida"
+        if len(signature) != SIGNATURE_SIZE:
+            return False, "semnatura cu lungime invalida"
+        if not lib.verify_transaction_signature_raw(sender, receiver, amount, signature):
+            return False, "semnatura invalida"
+
+        tx = (sender, receiver, amount, signature)
+        if tx in self.mempool.get_pending():
+            return True, None
+
+        self.mempool.add_transaction(sender, receiver, amount, signature)
+        print(f"Tranzactie adaugata (semnatura valida). Marime mempool: {self.mempool.size()}")
+        self.broadcast_new_transaction(sender, receiver, amount, signature)
+        return True, None
+
     def handle_message(self,msg):
         msg_type = msg.get("type")
 
@@ -173,20 +218,13 @@ class Node:
                 receiver = base64.b64decode(tx["receiver"])
                 amount = tx["amount"]
                 signature = base64.b64decode(tx["signature"])
-            except(KeyError<ValueError,TypeError) as e:
-                return{"type":"ERROR","data":f"tranzactie malformata: {e}"}
+            except (KeyError, ValueError, TypeError) as e:
+                return {"type": "ERROR", "data": f"tranzactie malformata: {e}"}
 
-            if len(sender) != ADDRESS_SIZE or len(receiver) != ADDRESS_SIZE:
-                return {"type": "ERROR", "data": "adresa cu lungime invalida"}
-            if len(signature) != SIGNATURE_SIZE:
-                return {"type": "ERROR", "data": "semnatura cu lungime invalida"}
-
-            if not lib.verify_transaction_signature_raw(sender,receiver,amount,signature):
-                print(f"Tranzactie respinsa: semnatura invalida (sender={sender.hex()[:12]}...)")
-                return {"type": "ERROR", "data": "semnatura invalida"}
-
-            self.mempool.add_transaction(sender, receiver, amount, signature)
-            print(f"Tranzactie adaugata (semnatura valida). Marime mempool: {self.mempool.size()}")
+            ok, error = self.receive_transaction(sender, receiver, amount, signature)
+            if not ok:
+                print(f"Tranzactie respinsa: {error}")
+                return {"type": "ERROR", "data": error}
             return {"type": "ACK", "data": "tranzactie primita"}
 
         if msg_type == "NEW_BLOCK" :
@@ -215,18 +253,32 @@ class Node:
                 old_chain_bytes = ctypes.string_at(old_ptr,old_len)
                 lib.free_serialized_buffer(old_ptr)
 
+                # Serializeaza noul lant INAINTE de a parsa blocurile
+                # (avem deja chain_bytes din mesajul primit)
                 old_chain_handle = self.chain
                 self.chain = new_chain
                 lib.destroy_blockchain(old_chain_handle)
                 print(f"Lant adoptat: {received_len} blocuri (anterior {local_len}).")
 
+                # NOU: curata din mempool tranzactiile care sunt deja in lantul adoptat
+                # (altfel raman in mempool si se mineaza din nou la infinit)
+                adopted_blocks = parse_chain(chain_bytes)
+                mined_txs = set()
+                for block in adopted_blocks:
+                    for tx_tuple in block["transactions"]:
+                        mined_txs.add(tx_tuple)
+                pending = self.mempool.get_pending()
+                for tx in pending:
+                    if tx in mined_txs:
+                        self.mempool.remove_transactions([tx])
+
             old_blocks = parse_chain(old_chain_bytes)
             new_blocks = parse_chain(chain_bytes)
             orphaned_txs = find_orphaned_transactions(old_blocks, new_blocks)
- 
+
             if orphaned_txs:
-                for sender, receiver, amount in orphaned_txs:
-                    self.mempool.add_transaction(sender, receiver, amount)
+                for sender, receiver, amount, signature in orphaned_txs:
+                    self.mempool.add_transaction(sender, receiver, amount, signature)
                 print(f"{len(orphaned_txs)} tranzactii orfane repuse in mempool.")
 
             return {"type": "ACK", "data": "block procesat"}
@@ -272,15 +324,23 @@ class Node:
         finally:
             server_sock.close()
 
-    def run(self):
+    def run_api(self,api_port):
+        app = create_app(self,lib)
+        app.run(host="0.0.0.0",port=api_port,use_reloader=False)
+
+    def run(self,api_port=None):
         listener_thread = threading.Thread(target=self.listen_loop, daemon=True)
         listener_thread.start()
 
-        # 2) SYNCING: incercam sa preluam cel mai lung lant existent
-        #    inainte sa incepem sa minam pe un lant posibil invechit.
+        
+        if api_port:
+            api_thread=threading.Thread(
+                target=self.run_api,args=(api_port,),daemon=True
+            )
+            api_thread.start()
+        
         self.sync_with_peers()
 
-        # 3) SYNCED: abia acum pornim minarea.
         miner_thread = threading.Thread(target=self.mining_loop, daemon=True)
         miner_thread.start()
 
@@ -290,6 +350,7 @@ class Node:
         except KeyboardInterrupt:
             print("\nOprire nod (Ctrl+C primit)...")
     
+
 def parse_peers(peers_str):
     if not peers_str:
         return []
@@ -303,7 +364,9 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 9001
     peers_arg = sys.argv[2] if len(sys.argv) > 2 else ""
     peers = parse_peers(peers_arg)
-
+ 
+    api_port = port + 1000
+    #portul API = portul P2P + 1000 / (9001 -> API pe 10001)
     node = Node("127.0.0.1", port, peers)
-    node.run()
+    node.run(api_port=api_port)
 

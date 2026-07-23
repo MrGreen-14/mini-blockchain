@@ -1,0 +1,131 @@
+from flask import Flask, request, jsonify
+import base64
+import ctypes
+
+from chain_format import parse_chain
+
+ADDRESS_SIZE  = 65   # cheia publica EC (format necomprimat: 04 + 32x + 32y)
+SIGNATURE_SIZE = 64  # r(32 bytes) + s(32 bytes), ECDSA/secp256k1
+
+
+def create_app(node, lib):
+    app = Flask(__name__)
+
+    # ------------------------------------------------------------------ #
+    #  POST /transactions  --  trimite o tranzactie semnata              #
+    # ------------------------------------------------------------------ #
+    # Echivalentul HTTP al mesajului {"type": "NEW_TRANSACTION", ...}
+    # din protocol.py.  Face exact aceeasi validare ca handle_message()
+    # din node.py, dar raspunde cu status code-uri HTTP in loc de
+    # {"type": "ACK"} / {"type": "ERROR"}.
+    #
+    # Clientul trimite un JSON in body:
+    # {
+    #     "sender":    "<base64>",   -- cheia publica a expeditorului
+    #     "receiver":  "<base64>",   -- cheia publica a destinatarului
+    #     "amount":    <int>,        -- suma (in unitati intregi)
+    #     "signature": "<base64>"    -- semnatura ECDSA a tranzactiei
+    # }
+    #
+    # Raspunsuri:
+    #   201 Created      -- tranzactie acceptata si adaugata in mempool
+    #   400 Bad Request  -- date lipsa/invalide/semnatura esuata
+
+    @app.route("/transactions", methods=["POST"])
+    def submit_transaction():
+
+        # --- Pasul 1: parseaza JSON-ul din body-ul HTTP ---
+        # request.get_json() face ce face receive_message() + json.loads()
+        # din protocol.py, dar automat -- Flask a citit deja bytes din socket,
+        # a parsat headerele HTTP, si acum extrage body-ul ca dict Python.
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "body-ul trebuie sa fie JSON valid"}), 400
+
+        # --- Pasul 2: extrage si decodeaza campurile ---
+        # Campurile sunt base64-encoded (la fel ca in wallet.py / node.py),
+        # pentru ca JSON nu poate transporta bytes bruti -- base64 transforma
+        # orice secventa de bytes intr-un string ASCII sigur pentru JSON.
+        try:
+            sender    = base64.b64decode(data["sender"])
+            receiver  = base64.b64decode(data["receiver"])
+            amount    = data["amount"]
+            signature = base64.b64decode(data["signature"])
+        except (KeyError, ValueError, TypeError) as e:
+            return jsonify({"error": f"tranzactie malformata: {e}"}), 400
+
+        # --- Pasul 3: valideaza, adauga in mempool, si propaga catre peers ---
+        # Totul (verificare lungimi, verificare semnatura, deduplicare,
+        # adaugare in mempool, broadcast) e centralizat in receive_transaction(),
+        # aceeasi metoda pe care o foloseste si handle_message() cand
+        # tranzactia vine de la un alt nod (P2P) -- o singura sursa de adevar
+        # pentru logica de business, indiferent pe unde intra tranzactia.
+        ok, error = node.receive_transaction(sender, receiver, amount, signature)
+        if not ok:
+            return jsonify({"error": error}), 400
+
+        return jsonify({
+            "message": "tranzactie acceptata",
+            "mempool_size": node.mempool.size()
+        }), 201
+
+    # ------------------------------------------------------------------ #
+    #  GET /chain  --  returneaza lantul curent, ca JSON lizibil          #
+    # ------------------------------------------------------------------ #
+    # Lantul e stocat intern ca structura binara C (Blockchain*, in DLL).
+    # Nu putem trimite bytes bruti intr-un JSON -- reutilizam parse_chain()
+    # din chain_format.py (deja scrisa in Modulul 8, pentru fork resolution)
+    # ca sa transformam bufferul binar intr-o lista de dict-uri Python,
+    # gata de jsonify().
+
+    @app.route("/chain", methods=["GET"])
+    def get_chain():
+        with node.chain_lock:
+            out_ptr = ctypes.c_void_p()
+            buf_len = lib.serialize_chain(node.chain, ctypes.byref(out_ptr))
+            chain_bytes = ctypes.string_at(out_ptr, buf_len)
+            lib.free_serialized_buffer(out_ptr)
+
+        blocks = parse_chain(chain_bytes)
+
+        # parse_chain() intoarce tranzactiile ca tuple de bytes bruti
+        # (sender, receiver, amount) -- utile pentru comparatii interne
+        # (fork resolution), dar bytes brut nu poate fi pus direct in JSON.
+        # Le transformam in hex, un format text lizibil si standard pentru
+        # a reprezenta bytes (fiecare byte -> 2 caractere hexa).
+        for block in blocks:
+            block["transactions"] = [
+                {
+                    "sender": sender.hex(),
+                    "receiver": receiver.hex(),
+                    "amount": amount,
+                    "signature":signature.hex(),
+                }
+                for sender, receiver, amount, signature in block["transactions"]
+            ]
+
+        return jsonify({
+            "length": len(blocks),
+            "blocks": blocks,
+        }), 200
+
+    # ------------------------------------------------------------------ #
+    #  GET /status  --  informatii rapide despre starea nodului          #
+    # ------------------------------------------------------------------ #
+    # Util pentru un viitor UI (Modul 11): "e nodul sincronizat? cate
+    # tranzactii asteapta in mempool? cat de lung e lantul local?"
+    # fara sa trebuiasca sa descarci tot lantul doar ca sa afli atat.
+
+    @app.route("/status", methods=["GET"])
+    def get_status():
+        with node.chain_lock:
+            length = lib.get_chain_length(node.chain)
+
+        return jsonify({
+            "state": node.state.value,
+            "chain_length": length,
+            "mempool_size": node.mempool.size(),
+            "peers": [f"{h}:{p}" for h, p in node.peers],
+        }), 200
+
+    return app

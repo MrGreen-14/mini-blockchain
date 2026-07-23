@@ -7,7 +7,7 @@
 #include "export.h"
 
 #define BLOCKCHAIN_MAGIC   0x424C4B43u  /* "BLKC" -- identifica fisierul ca fiind al nostru */
-#define BLOCKCHAIN_VERSION 2u           // v2: transaction are acum campul signature (Modulul 9)
+#define BLOCKCHAIN_VERSION 1u           // v2: transaction are acum campul signature (Modulul 9)
 
 BLOCKCHAIN_API size_t serialize_chain(const Blockchain*chain,uint8_t**out_buffer);
 BLOCKCHAIN_API Blockchain* deserialize_chain(const uint8_t* buffer, size_t lenght);

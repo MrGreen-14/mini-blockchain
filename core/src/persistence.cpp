@@ -98,8 +98,8 @@ static int append_block_raw(Blockchain* chain, const Block* block) {
 /*
 [MAGIC:4][VERSION:4][BLOCK_COUNT:8]
 [idx:4][timestamp:8][prev_hash:65][merkle_root:65][nonce:4][hash:65][tx_count:8]
-  [sender:65][receiver:65][amount:8] <- tranzactia 0 a blocului 0
-  [sender:65][receiver:65][amount:8] <- tranzactia 1 a blocului 0
+  [sender:65][receiver:65][amount:8][signature:64] <- tranzactia 0 a blocului 0
+  [sender:65][receiver:65][amount:8][signature:64] <- tranzactia 1 a blocului 0
   ...
 [idx:4][timestamp:8][prev_hash:65]...<- blocul 1 incepe aici
 ...
@@ -131,6 +131,7 @@ size_t serialize_chain(const Blockchain* chain, uint8_t** out_buffer) {
 			if (!write_fixed(&bb, tx->sender, ADDRESS_SIZE))   goto fail;
 			if (!write_fixed(&bb, tx->receiver, ADDRESS_SIZE)) goto fail;
 			if (!write_u64(&bb, tx->amount)) goto fail;
+			if (!write_fixed(&bb, (const char*)tx->signature, SIGNATURE_SIZE)) goto fail;
 		}
 	}
 
@@ -176,13 +177,13 @@ Blockchain* deserialize_chain(const uint8_t* buffer, size_t length) {
 
 		uint64_t raw_timestamp, tx_count;
 
-		if (!read_u32(&r, &block.index))                  goto fail;
-		if (!read_u64(&r, &raw_timestamp))                goto fail;
+		if (!read_u32(&r, &block.index)) goto fail;
+		if (!read_u64(&r, &raw_timestamp)) goto fail;
 		block.timestamp = (time_t)raw_timestamp;
-		if (!read_fixed(&r, block.prev_hash, HASH_SIZE))   goto fail;
+		if (!read_fixed(&r, block.prev_hash, HASH_SIZE)) goto fail;
 		if (!read_fixed(&r, block.merkle_root, HASH_SIZE)) goto fail;
-		if (!read_u32(&r, &block.nonce))                   goto fail;
-		if (!read_fixed(&r, block.hash, HASH_SIZE))         goto fail;
+		if (!read_u32(&r, &block.nonce)) goto fail;
+		if (!read_fixed(&r, block.hash, HASH_SIZE)) goto fail;
 
 		if (!read_u64(&r, &tx_count)) goto fail;
 
@@ -192,10 +193,11 @@ Blockchain* deserialize_chain(const uint8_t* buffer, size_t length) {
 
 		for (uint64_t t = 0; t < tx_count; t++) {
 			Transaction tx;
-			if (!read_fixed(&r, tx.sender, ADDRESS_SIZE))     goto fail;
-			if (!read_fixed(&r, tx.receiver, ADDRESS_SIZE))   goto fail;
-			if (!read_u64(&r, &tx.amount))                    goto fail;
-			if (!append_transaction_raw(&block, &tx))         goto fail;
+			if (!read_fixed(&r, tx.sender, ADDRESS_SIZE)) goto fail;
+			if (!read_fixed(&r, tx.receiver, ADDRESS_SIZE)) goto fail;
+			if (!read_u64(&r, &tx.amount)) goto fail;
+			if (!read_fixed(&r, (char*)tx.signature, SIGNATURE_SIZE)) goto fail;
+			if (!append_transaction_raw(&block, &tx)) goto fail;
 		}
 
 		if (!append_block_raw(chain, &block)) {
