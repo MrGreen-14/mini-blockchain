@@ -193,7 +193,10 @@ class Node:
                     lib.destroy_blockchain(new_chain)
 
         self.state = NodeState.SYNCED
-        print(f"[{self.port}] SYNCED -- incep minarea.")
+        if self.is_miner:
+            print(f"[{self.port}] SYNCED -- incep minarea.")
+        else:
+            print(f"[{self.port}] SYNCED -- doar propagare (relay), nu mineaza.")
 
     def get_peers_info(self):
         results = []
@@ -398,7 +401,6 @@ class Node:
         except KeyboardInterrupt:
             print("\nOprire nod (Ctrl+C primit)...")
     
-
 def parse_peers(peers_str):
     if not peers_str:
         return []

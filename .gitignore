@@ -115,5 +115,7 @@ build/
 vcpkg_installed/
 **/vcpkg_installed/*
 
+
+network/tx_body.json
 *.priv
 *.pub
