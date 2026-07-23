@@ -17,7 +17,7 @@ from consensus import ForkResolution, resolve_fork
 from chain_format import parse_chain,find_orphaned_transactions
 from chain_format import ADDRESS_SIZE, SIGNATURE_SIZE
 
-DIFFICULTY = 5
+DIFFICULTY = 4
 BLOCK_REWARD = 50
 MAX_TX_PER_BLOCK = 10
 
@@ -83,6 +83,7 @@ class Node:
         self.chain_lock = threading.Lock()
         self.stop_flag = ctypes.c_int(0)
         self.state = NodeState.SYNCING
+        self.api_port = None
 
     #---Mining---
 
@@ -194,6 +195,36 @@ class Node:
         self.state = NodeState.SYNCED
         print(f"[{self.port}] SYNCED -- incep minarea.")
 
+    def get_peers_info(self):
+        results = []
+        for peer_host, peer_port in self.peers:
+            entry = {
+                "host": peer_host,
+                "p2p_port": peer_port,
+                "reachable": False,
+                "api_port": None,
+                "role": None,
+            }
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                sock.connect((peer_host, peer_port))
+                send_message(sock, {"type": "GET_INFO"})
+                response = receive_message(sock)
+                sock.close()
+
+                if response.get("type") == "INFO_RESPONSE":
+                    info = response.get("data", {})
+                    entry["reachable"] = True
+                    entry["api_port"] = info.get("api_port")
+                    entry["role"] = info.get("role")
+            except OSError:
+                pass  # peer oprit/retea cazuta -- ramane cu reachable=False
+
+            results.append(entry)
+        return results
+
+
 # ---------------- Handling mesaje primite ----------------
     def receive_transaction(self, sender, receiver, amount, signature):
         if len(sender) != ADDRESS_SIZE or len(receiver) != ADDRESS_SIZE:
@@ -296,7 +327,15 @@ class Node:
                 lib.free_serialized_buffer(out_ptr)
             encoded = base64.b64encode(chain_bytes).decode("ascii")
             return{"type":"CHAIN_RESPONSE","data": encoded}
-        
+
+        if msg_type == "GET_INFO":
+            return {
+                "type": "INFO_RESPONSE",
+                "data": {
+                    "api_port": self.api_port,
+                    "role": "MINER" if self.is_miner else "RELAY",
+                },
+            }
 
         print(f"Tip de mesaj necunoscut: {msg_type}")
         return {"type": "ERROR", "data": f"tip necunoscut: {msg_type}"}
@@ -333,6 +372,7 @@ class Node:
         app.run(host="0.0.0.0",port=api_port,use_reloader=False)
 
     def run(self,api_port=None):
+        self.api_port = api_port
         listener_thread = threading.Thread(target=self.listen_loop, daemon=True)
         listener_thread.start()
 
