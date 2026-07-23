@@ -1,15 +1,93 @@
-from flask import Flask, request, jsonify
 import base64
+import binascii
 import ctypes
-
+import os
+import sys
+from flask import Flask, request, jsonify, send_from_directory
 from chain_format import parse_chain
 
+
+
+NETWORK_DIR = os.path.join(os.path.dirname(__file__), "..", "network")
+NETWORK_DIR = os.path.abspath(NETWORK_DIR)
+if NETWORK_DIR not in sys.path:
+    sys.path.insert(0, NETWORK_DIR)
+
+from wallet_keys import load_private_key, load_public_key, list_wallet_names
+
+   
 ADDRESS_SIZE  = 65   # cheia publica EC (format necomprimat: 04 + 32x + 32y)
 SIGNATURE_SIZE = 64  # r(32 bytes) + s(32 bytes), ECDSA/secp256k1
 
 
 def create_app(node, lib):
     app = Flask(__name__)
+
+    FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "ui")
+    
+    @app.route("/")
+    def serve_index():
+        return send_from_directory(FRONTEND_DIR, "index.html")
+    
+    @app.route("/<path:filename>")
+    def serve_static(filename):
+        return send_from_directory(FRONTEND_DIR, filename)
+
+    lib.sign_transaction_raw.argtypes = [
+        ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint64, ctypes.c_char_p, ctypes.c_char_p
+        ]
+    lib.sign_transaction_raw.restype = ctypes.c_int
+
+ # ------------------------------------------------------------------ #
+    #  GET /wallet/names  --  ce portofele exista local (pt dropdown UI) #
+    # ------------------------------------------------------------------ #
+
+    @app.route("/wallet/names", methods=["GET"])
+    def wallet_names():
+        return jsonify({"names": list_wallet_names()}), 200
+
+ # ------------------------------------------------------------------ #
+    #  GET /peers  --  interogheaza fiecare peer (rol + accesibilitate)  #
+    # ------------------------------------------------------------------ #
+
+    @app.route("/peers", methods=["GET"])
+    def get_peers():
+        return jsonify({"peers": node.get_peers_info()}), 200
+
+
+
+    @app.route("/wallet/sign-and-send", methods=["POST"])
+    def sign_and_send():
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "body-ul trebuie sa fie JSON valid"}), 400
+
+        try:
+            sender_name = data["sender_name"]
+            receiver = data["receiver"]
+            amount = data["amount"]
+        except KeyError as e:
+            return jsonify({"error": f"camp lipsa: {e}"}), 400
+
+        try:
+            sender_priv = load_private_key(sender_name)
+            sender_pub = load_public_key(sender_name)
+            receiver_pub = load_public_key(receiver)
+        except (FileNotFoundError, ValueError, binascii.Error) as e:
+            return jsonify({"error": f"portofel invalid: {e}"}), 400
+
+        signature = ctypes.create_string_buffer(SIGNATURE_SIZE)
+        if not lib.sign_transaction_raw(sender_pub, receiver_pub, amount, sender_priv, signature):
+            return jsonify({"error": "semnare esuata"}), 400
+
+        ok, error = node.receive_transaction(sender_pub, receiver_pub, amount, signature.raw)
+        if not ok:
+            return jsonify({"error": error}), 400
+
+        return jsonify({
+            "message": "tranzactie semnata si trimisa",
+            "mempool_size": node.mempool.size()
+        }), 201
 
     # ------------------------------------------------------------------ #
     #  POST /transactions  --  trimite o tranzactie semnata              #

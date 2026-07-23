@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini-Blockchain — Nod</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <!-- Bara de stare -- se actualizeaza singura, la fiecare 2 secunde -->
+  <header class="status-bar" id="status-bar">
+    <div class="status-left">
+      <span class="status-dot" id="status-dot"></span>
+      <span class="status-state" id="status-state">--</span>
+      <span class="status-label">stare nod</span>
+    </div>
+    <div class="status-metrics">
+      <div class="metric">
+        <span class="metric-value" id="metric-chain-length">--</span>
+        <span class="metric-label">blocuri</span>
+      </div>
+      <div class="metric">
+        <span class="metric-value" id="metric-mempool-size">--</span>
+        <span class="metric-label">in mempool</span>
+      </div>
+      <div class="metric">
+        <span class="metric-value" id="metric-peers">--</span>
+        <span class="metric-label">peers</span>
+      </div>
+    </div>
+    <div class="status-right">
+      <span id="status-updated">nu s-a actualizat inca</span>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <!-- Vizualizator de lant -- vine in pasul urmator -->
+    <section class="panel chain-panel" id="chain-panel">
+      <div class="panel-header">
+        <h2>Lantul de blocuri</h2>
+      </div>
+      <div class="panel-body" id="blocks-container">
+        <p class="placeholder">(vine in pasul urmator)</p>
+      </div>
+    </section>
+
+    <!-- Coloana din dreapta: tranzactie + peers, stivuite -->
+    <div class="side-column">
+    <aside class="panel tx-panel" id="tx-panel">
+      <div class="panel-header">
+        <h2>Tranzactie noua</h2>
+      </div>
+      <div class="panel-body">
+         <form id="tx-form" class="tx-form">
+          <label for="tx-sender">sender (portofel local)</label>
+          <select id="tx-sender" name="sender_name" required>
+            <option value="">-- se incarca portofelele --</option>
+          </select>
+
+          <label for="tx-receiver">receiver (nume portofel sau cheie hex)</label>
+          <input type="text" id="tx-receiver" name="receiver" placeholder="ex: bob" required>
+
+          <label for="tx-amount">amount</label>
+          <input type="number" id="tx-amount" name="amount" min="1" placeholder="100" required>
+
+          <button type="submit">Semneaza si trimite</button>
+        </form>
+        <div id="tx-response" class="tx-response"></div>
+       </div>
+    </aside>
+
+    <section class="panel peers-panel" id="peers-panel">
+      <div class="panel-header">
+        <h2>Peers conectati</h2>
+      </div>
+      <div class="panel-body" id="peers-container">
+        <p class="placeholder">Se incarca...</p>
+      </div>
+    </section>
+    </div>
+
+</main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

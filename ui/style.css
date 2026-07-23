@@ -1,0 +1,403 @@
+/* ---------------------------------------------------------------- */
+/*  Tokeni de design                                                  */
+/* ---------------------------------------------------------------- */
+:root {
+  --bg: #10131a;
+  --panel: #171c26;
+  --panel-border: #262c3a;
+  --text: #e7e9ee;
+  --muted: #8890a3;
+
+  --accent-gold: #e8a33d;
+  --accent-green: #48c78e;
+  --accent-red: #e5534b;
+  --accent-amber: #d9a441;
+
+  --font-ui: "Inter", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+h1, h2, h3 { font-family: var(--font-ui); margin: 0; }
+
+/* ---------------------------------------------------------------- */
+/*  Bara de stare                                                     */
+/* ---------------------------------------------------------------- */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 24px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.status-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-data);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  display: inline-block;
+  transition: background-color 0.3s ease;
+}
+
+.status-dot.synced { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+.status-dot.syncing { background: var(--accent-amber); box-shadow: 0 0 8px var(--accent-amber); }
+.status-dot.offline { background: var(--accent-red); box-shadow: 0 0 8px var(--accent-red); }
+
+.status-state {
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.status-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-family: var(--font-ui);
+}
+
+.status-metrics {
+  display: flex;
+  gap: 28px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+}
+
+.metric-value {
+  font-family: var(--font-data);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--accent-gold);
+}
+
+.metric-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-right {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-family: var(--font-data);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- */
+/*  Layout principal                                                  */
+/* ---------------------------------------------------------------- */
+.layout {
+  display: grid;
+  grid-template-columns: 2.2fr 1fr;
+  gap: 20px;
+  padding: 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.panel-header h2 {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.panel-body {
+  padding: 20px;
+}
+
+.placeholder {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+/* ---------------------------------------------------------------- */
+/*  Cardurile de bloc + conectorul dintre ele                        */
+/* ---------------------------------------------------------------- */
+.blocks-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.block-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  background: #12161f;
+}
+
+.block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.block-header h3 {
+  font-family: var(--font-data);
+  font-size: 0.95rem;
+  color: var(--accent-gold);
+}
+
+.block-tx-count {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.block-field {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 8px;
+  font-size: 0.82rem;
+  padding: 2px 0;
+}
+
+.block-field .field-label {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  align-self: center;
+}
+
+.block-field .field-value {
+  font-family: var(--font-data);
+  word-break: break-all;
+  cursor: help;
+}
+
+.block-tx-list {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--panel-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  flex-wrap: wrap;
+}
+
+.tx-coinbase-badge {
+  background: rgba(232, 163, 61, 0.15);
+  color: var(--accent-gold);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.tx-arrow { color: var(--muted); }
+.tx-amount { color: var(--accent-green); margin-left: auto; }
+
+/* Conectorul vizual intre doua blocuri consecutive */
+.chain-connector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 6px 24px;
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+}
+
+.chain-connector .connector-line {
+  width: 2px;
+  height: 18px;
+  background: var(--accent-green);
+}
+
+.chain-connector.broken .connector-line { background: var(--accent-red); }
+
+.chain-connector .connector-label {
+  color: var(--muted);
+}
+
+.chain-connector.broken .connector-label { color: var(--accent-red); }
+
+.chain-connector .connector-hash {
+  color: var(--accent-green);
+}
+
+.chain-connector.broken .connector-hash { color: var(--accent-red); }
+
+
+/* ---------------------------------------------------------------- */
+/*  Responsive                                                        */
+/* ---------------------------------------------------------------- */
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+  .status-bar { flex-wrap: wrap; row-gap: 10px; }
+}
+ 
+/* ---------------------------------------------------------------- */
+/*  Formular tranzactie                                               */
+/* ---------------------------------------------------------------- */
+.tx-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+ 
+.tx-form label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 10px;
+}
+ 
+.tx-form label:first-child { margin-top: 0; }
+ 
+.tx-form textarea,
+.tx-form input,
+.tx-form select {
+  background: #0c0f15;
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  padding: 8px 10px;
+  resize: vertical;
+  width: 100%;
+}
+ 
+.tx-form textarea:focus,
+.tx-form input:focus {
+  outline: none;
+  border-color: var(--accent-gold);
+}
+ 
+.tx-form button {
+  margin-top: 16px;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  background: var(--accent-gold);
+  color: #10131a;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+ 
+.tx-form button:hover { filter: brightness(1.1); }
+.tx-form button:active { filter: brightness(0.9); }
+ 
+.tx-response {
+  margin-top: 14px;
+  font-family: var(--font-data);
+  font-size: 0.8rem;
+  word-break: break-word;
+}
+ 
+.tx-response-ok { color: var(--accent-green); }
+.tx-response-error { color: var(--accent-red); }
+
+.side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.peer-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--panel-border);
+  font-family: var(--font-data);
+  font-size: 0.82rem;
+}
+
+.peer-item:last-child { border-bottom: none; }
+
+.peer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  flex-shrink: 0;
+}
+
+.peer-item.peer-reachable .peer-dot {
+  background: var(--accent-green);
+}
+
+.peer-address {
+  flex: 1;
+  color: var(--text);
+}
+
+.peer-role-badge {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.peer-role-miner {
+  background: rgba(232, 163, 61, 0.18);
+  color: var(--accent-gold);
+}
+
+.peer-role-relay {
+  background: rgba(136, 144, 163, 0.18);
+  color: var(--muted);
+}
+
+.peer-role-unknown {
+  background: rgba(229, 83, 75, 0.15);
+  color: var(--accent-red);
+}
