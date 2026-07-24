@@ -31,7 +31,7 @@ int sign_transaction(Transaction* tx, const unsigned char* private_key) {
 	serialize_transaction(tx, buffer, sizeof(buffer));
 
 	unsigned char hash[32];
-	compute_sha256_raw((const unsigned char*)buffer, TX_SERIALIZED_SIZE, hash);
+	compute_sha256_raw((const unsigned char*)buffer, TX_SERIALIZED_SIZE, hash);//secp256k1
 
 	return sign_hash(private_key, hash, tx->signature);
 }
@@ -57,7 +57,7 @@ int verify_transaction_signature(const Transaction* tx) {
 	unsigned char hash[32];
 	compute_sha256_raw((const unsigned char*)buffer, TX_SERIALIZED_SIZE, hash);
 
-	// sender-ul CHIAR ESTE cheia publica bruta (ADDRESS_SIZE == PUBLIC_KEY_SIZE == 65) --
+	// sender-ul = cheia publica bruta (ADDRESS_SIZE == PUBLIC_KEY_SIZE == 65)
 	// nu exista un pas separat de "cauta adresa in registru", adresa e cheia.
 	return verify_hash_signature((const unsigned char*)tx->sender, hash, tx->signature);
 }

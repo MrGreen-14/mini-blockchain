@@ -1,16 +1,5 @@
-# network/test_http_transaction.py
-#
-# Script de test pentru Modulul 10: semneaza o tranzactie folosind
-# aceleasi functii ctypes ca wallet.py, apoi tipareste o comanda curl
-# gata de rulat, ca sa testezi POST /transactions fara sa scrii JSON-ul
-# de mana (sender/receiver/signature sunt bytes binari, nu se pot
-# tasta direct intr-un curl).
-#
-# Foloseste chei deja generate cu:
 #   python wallet.py genereaza alice
 #   python wallet.py genereaza bob
-#
-# Ruleaza din radacina proiectului:
 #   python network/test_http_transaction.py alice bob 100 10001
 
 import ctypes
@@ -54,12 +43,6 @@ if __name__ == "__main__":
         "signature": base64.b64encode(signature.raw).decode("ascii"),
     }
 
-    # Scriem JSON-ul intr-un fisier separat, nu direct in linia de comanda.
-    # Motiv: pe Windows, curl.exe (executabil nativ) parseaza argumentele
-    # dupa reguli diferite fata de bash -- ghilimelele duble din interiorul
-    # JSON-ului se pot corupe cand trec prin PowerShell catre curl.exe.
-    # Cu --data-binary @fisier, curl citeste bytes direct din fisier,
-    # fara nicio interpretare de shell -- imun la problema asta.
     out_path = os.path.join(os.path.dirname(__file__), "tx_body.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(body, f)

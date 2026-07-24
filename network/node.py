@@ -17,7 +17,7 @@ from consensus import ForkResolution, resolve_fork
 from chain_format import parse_chain,find_orphaned_transactions
 from chain_format import ADDRESS_SIZE, SIGNATURE_SIZE
 
-DIFFICULTY = 4
+DIFFICULTY = 5
 BLOCK_REWARD = 50
 MAX_TX_PER_BLOCK = 10
 
@@ -85,7 +85,7 @@ class Node:
         self.state = NodeState.SYNCING
         self.api_port = None
 
-    #---Mining---
+# ---------------- Mining ----------------
 
     def mining_loop(self):
         while True:
@@ -227,8 +227,8 @@ class Node:
             results.append(entry)
         return results
 
-
 # ---------------- Handling mesaje primite ----------------
+
     def receive_transaction(self, sender, receiver, amount, signature):
         if len(sender) != ADDRESS_SIZE or len(receiver) != ADDRESS_SIZE:
             return False, "adresa cu lungime invalida"

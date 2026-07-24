@@ -212,7 +212,7 @@ static int test_tamper_after_mining() {
 //  5. Input corupt: magic gresit + buffer trunchiat -> NULL, fara crash
 
 static int test_corrupted_input() {
-    // a) fisier cu magic gresit
+    //fisier cu magic gresit
     const char* garbage_path = "test_garbage.dat";
     FILE* f = fopen(garbage_path, "wb");
     uint32_t junk = 0xDEADBEEF;
@@ -227,7 +227,7 @@ static int test_corrupted_input() {
         return 0;
     }
 
-    // b) buffer trunchiat: serializare valida, apoi trunchiata cu 10 bytes
+    //buffer trunchiat: serializare valida, apoi trunchiata cu 10 bytes
     unsigned char priv[PRIVATE_KEY_SIZE], pub[PUBLIC_KEY_SIZE];
     unsigned char priv_r[PRIVATE_KEY_SIZE], pub_r[PUBLIC_KEY_SIZE];
     generate_keypair(priv, pub);
@@ -266,10 +266,9 @@ static int test_corrupted_input() {
     return 1;
 }
 
-// -------------------------------------------------------------------------- //
-//  6. Capacity boundary: mineaza 5 blocuri (peste INITIAL_CAPACITY=4) --     //
-//     forteaza realloc-ul din begin_block() si confirma ca nu mai crapa.    //
-// -------------------------------------------------------------------------- //
+
+//  6. Capacity boundary: mineaza 5 blocuri (peste INITIAL_CAPACITY=4)
+// forteaza realloc-ul din begin_block() si confirma ca nu mai crapa.
 static int test_capacity_growth() {
     unsigned char priv[PRIVATE_KEY_SIZE], pub[PUBLIC_KEY_SIZE];
     unsigned char priv_r[PRIVATE_KEY_SIZE], pub_r[PUBLIC_KEY_SIZE];
@@ -301,7 +300,6 @@ static int test_capacity_growth() {
 }
 
 int main() {
-    printf("=== Teste Mini-Blockchain (arhitectura cu semnaturi EC) ===\n\n");
 
     int failed = 0;
     failed += !test_wallet_sign_verify();
@@ -311,6 +309,6 @@ int main() {
     failed += !test_corrupted_input();
     failed += !test_capacity_growth();
 
-    printf("\n--- Rezultat: %d/%d teste trecute ---\n", 6 - failed, 6);
+    printf("\nRezultat: %d/%d teste trecute\n", 6 - failed, 6);
     return failed;
 }

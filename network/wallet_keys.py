@@ -1,5 +1,3 @@
-# network/wallet_keys.py
-#
 # Functii comune de incarcare/salvare a cheilor de portofel, folosite
 # de wallet.py (CLI), test_http_transaction.py, si (in curand) de
 # api/app.py pentru semnare direct din UI. Extrase intr-un singur loc
@@ -51,9 +49,6 @@ def save_keypair(name, priv_bytes, pub_bytes):
 
 
 def list_wallet_names():
-    """Numele (fara extensie) tuturor portofelelor disponibile local.
-    Nu e folosit inca -- il pregatesc pentru Punctul 1, ca sa poti
-    alege expeditorul dintr-un dropdown in UI, nu sa-l tastezi manual."""
     if not os.path.isdir(WALLETS_DIR):
         return []
     names = set()
